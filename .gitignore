@@ -1,0 +1,46 @@
+### Gradle
+.gradle/
+/build/
+/out/
+
+### IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+### OS generated files
+.DS_Store
+Thumbs.db
+
+### Logs and temporary files
+*.log
+tmp/
+*.tmp
+
+### Local configuration
+local.properties
+
+### Kotlin/Java build outputs
+*.class
+*.jar
+*.war
+*.ear
+*.kotlin_module
+
+### Plugin / distribution artifacts
+/distributions/
+/instrumented/
+/libs/
+
+### Editor/IDE
+.vscode/
+*~
+*.swp
+
+### Misc
+.cache/
+/.idea-sandbox/
+
+.intellijPlatform/
+.idea/
