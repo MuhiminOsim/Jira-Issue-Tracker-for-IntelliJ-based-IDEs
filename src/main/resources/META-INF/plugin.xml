@@ -1,0 +1,71 @@
+<idea-plugin>
+    <id>com.app.jiraplugin.JiraIntegration</id>
+    <name>Jira Issue Tracker</name>
+    <vendor email="support@example.com" url="https://example.com">com.app</vendor>
+    <description><![CDATA[
+      <h2>Jira Issue Tracker</h2>
+      <p>View, update, and manage Jira issues directly from the IDE.</p>
+      <ul>
+        <li>Browse issues using JQL queries</li>
+        <li>View issue details (status, priority, assignee, description)</li>
+        <li>Add comments to issues</li>
+        <li>Transition issues between statuses</li>
+        <li>Log work time on issues</li>
+        <li>Quick-create issues via browser</li>
+        <li>Open issues and boards in browser</li>
+      </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Settings page under Tools -->
+        <applicationConfigurable parentId="tools"
+                                 instance="com.app.jiraplugin.settings.JiraSettingsConfigurable"
+                                 id="com.app.jiraplugin.settings.JiraSettingsConfigurable"
+                                 displayName="Jira Issue Tracker"/>
+
+        <!-- Tool window on the right side -->
+        <toolWindow id="Jira Issues" secondary="true" anchor="right"
+                    factoryClass="com.app.jiraplugin.ui.JiraToolWindowFactory"
+                    icon="AllIcons.Toolwindows.ToolWindowAnt"/>
+
+        <!-- Application-level services -->
+        <applicationService serviceImplementation="com.app.jiraplugin.settings.JiraSettingsState"/>
+        <applicationService serviceImplementation="com.app.jiraplugin.api.JiraApiClient"/>
+    </extensions>
+
+    <actions>
+        <!-- Jira menu group in the main menu under Tools -->
+        <group id="JiraPlugin.MainMenu" text="Jira" description="Jira actions" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+
+            <action id="JiraPlugin.AddComment"
+                    class="com.app.jiraplugin.actions.AddCommentAction"
+                    text="Add Comment..."
+                    description="Add a comment to a Jira issue"/>
+
+            <action id="JiraPlugin.TransitionIssue"
+                    class="com.app.jiraplugin.actions.TransitionIssueAction"
+                    text="Change Issue Status..."
+                    description="Transition a Jira issue to a new status"/>
+
+            <action id="JiraPlugin.LogTime"
+                    class="com.app.jiraplugin.actions.LogTimeAction"
+                    text="Log Time..."
+                    description="Log work time on a Jira issue"/>
+
+            <separator/>
+
+            <action id="JiraPlugin.CreateIssue"
+                    class="com.app.jiraplugin.actions.CreateIssueAction"
+                    text="Create Issue (Browser)"
+                    description="Open Jira issue creation page in browser"/>
+
+            <action id="JiraPlugin.OpenBoard"
+                    class="com.app.jiraplugin.actions.OpenBoardAction"
+                    text="Open Jira Board (Browser)"
+                    description="Open the Jira board in your browser"/>
+        </group>
+    </actions>
+</idea-plugin>
