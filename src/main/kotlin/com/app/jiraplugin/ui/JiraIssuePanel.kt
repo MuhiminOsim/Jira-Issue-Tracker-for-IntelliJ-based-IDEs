@@ -51,25 +51,27 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
     private var allProjects: List<JiraProject> = emptyList()
     private var isUpdatingFilters = false
 
-    // Detail pane components
+    private var isProgrammaticUpdate = false
+
     private val issueKeyLabel = JLabel()
     private val issueSummaryArea = JTextArea().apply {
-        isEditable = false
+        isEditable = true
         lineWrap = true
         wrapStyleWord = true
         font = JBUI.Fonts.label(16f).asBold()
         background = UIUtil.getPanelBackground()
-        border = null
+        border = JBUI.Borders.customLine(JBColor.border(), 1)
     }
     private val issueStatusLabel = JLabel()
     private val issuePriorityLabel = JLabel()
     private val issueAssigneeLabel = JLabel()
     private val issueDescriptionArea = JTextArea().apply {
-        isEditable = false
+        isEditable = true
         lineWrap = true
         wrapStyleWord = true
         font = JBUI.Fonts.label(13f)
         background = UIUtil.getPanelBackground()
+        border = JBUI.Borders.empty(4)
     }
 
     private val detailPanel = JPanel(BorderLayout())
@@ -81,8 +83,12 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
     private val transitionButton = JButton("🔄 Change Status")
     private val logTimeButton = JButton("⏱ Log Time")
     private val refreshButton = JButton("Refresh")
+    private val createIssueButton = JButton("➕ Create Issue")
     private val toggleDetailButton = JButton("📋 Show Details")
     private val openInBrowserButton = JButton("🌐 Open in Browser")
+    private val saveChangesButton = JButton("💾 Save Changes").apply {
+        isEnabled = false
+    }
 
     private var selectedIssue: JiraIssue? = null
     private var selectedRow: IssueRowComponent? = null
@@ -123,6 +129,9 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
 
             c.gridx = 4
             c.insets = JBUI.insetsLeft(8)
+            add(createIssueButton, c)
+
+            c.gridx = 5
             c.weightx = 0.0
             add(toggleDetailButton, c)
         }
@@ -196,13 +205,34 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             }, BorderLayout.CENTER)
         }
 
-        val actionPanel = JPanel(FlowLayout(FlowLayout.LEFT, 10, 10)).apply {
+        val actionPanel = JPanel(GridBagLayout()).apply {
             border = JBUI.Borders.customLine(JBColor.border(), 1, 0, 0, 0)
             background = UIUtil.getPanelBackground()
-            add(commentButton)
-            add(transitionButton)
-            add(logTimeButton)
-            add(openInBrowserButton)
+            
+            val c = GridBagConstraints().apply {
+                fill = GridBagConstraints.NONE
+                anchor = GridBagConstraints.WEST
+                insets = JBUI.insets(10, 10, 0, 0)
+                gridy = 0
+                gridx = 0
+            }
+            
+            add(saveChangesButton, c)
+            c.gridx++
+            add(commentButton, c)
+            c.gridx++
+            c.weightx = 1.0
+            add(transitionButton, c)
+            
+            c.gridy = 1
+            c.gridx = 0
+            c.weightx = 0.0
+            c.insets = JBUI.insets(10, 10, 10, 0)
+            add(logTimeButton, c)
+            c.gridx++
+            c.weightx = 1.0
+            c.gridwidth = 2
+            add(openInBrowserButton, c)
         }
 
         detailPanel.add(detailHeader, BorderLayout.NORTH)
@@ -235,11 +265,25 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             loadProjects()
             refreshIssues() 
         }
+        createIssueButton.addActionListener {
+            if (JiraCreateIssueDialog(project).showAndGet()) {
+                refreshIssues()
+            }
+        }
         commentButton.addActionListener { addComment() }
         transitionButton.addActionListener { changeStatus() }
         logTimeButton.addActionListener { logTime() }
         openInBrowserButton.addActionListener { openInBrowser() }
         toggleDetailButton.addActionListener { toggleDetailPanel() }
+        saveChangesButton.addActionListener { saveIssueDetails() }
+
+        val docListener = object : DocumentListener {
+            override fun insertUpdate(e: DocumentEvent) = checkDirty()
+            override fun removeUpdate(e: DocumentEvent) = checkDirty()
+            override fun changedUpdate(e: DocumentEvent) = checkDirty()
+        }
+        issueSummaryArea.document.addDocumentListener(docListener)
+        issueDescriptionArea.document.addDocumentListener(docListener)
 
         searchField.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: DocumentEvent) = applyLocalFilter()
@@ -321,7 +365,16 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         }
     }
 
+    private fun checkDirty() {
+        if (isProgrammaticUpdate) return
+        val issue = selectedIssue ?: return
+        val summaryChanged = issueSummaryArea.text != issue.fields.getSummaryText()
+        val descChanged = issueDescriptionArea.text != issue.fields.getDescriptionText()
+        saveChangesButton.isEnabled = summaryChanged || descChanged
+    }
+
     private fun showIssueDetail(issue: JiraIssue) {
+        isProgrammaticUpdate = true
         issueKeyLabel.text = issue.key
         issueSummaryArea.text = issue.fields.getSummaryText()
         issueStatusLabel.text = issue.fields.getStatusName()
@@ -333,12 +386,16 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         transitionButton.isEnabled = true
         logTimeButton.isEnabled = true
         openInBrowserButton.isEnabled = true
+        saveChangesButton.isEnabled = false
+        
+        isProgrammaticUpdate = false
 
         detailPanel.revalidate()
         detailPanel.repaint()
     }
 
     private fun showEmptyDetailState() {
+        isProgrammaticUpdate = true
         issueKeyLabel.text = ""
         issueSummaryArea.text = "Select an issue to view details"
         issueStatusLabel.text = "-"
@@ -350,6 +407,8 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         transitionButton.isEnabled = false
         logTimeButton.isEnabled = false
         openInBrowserButton.isEnabled = false
+        saveChangesButton.isEnabled = false
+        isProgrammaticUpdate = false
     }
     
     private fun loadProjects() {
@@ -442,6 +501,35 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                         }
                     )
                 }
+            }
+        })
+    }
+
+    private fun saveIssueDetails() {
+        val issue = selectedIssue ?: return
+        val newSummary = issueSummaryArea.text
+        val newDescription = issueDescriptionArea.text
+
+        saveChangesButton.isEnabled = false
+        saveChangesButton.text = "Saving..."
+
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Saving Issue Changes", true) {
+            override fun run(indicator: ProgressIndicator) {
+                JiraApiClient.instance.updateIssueDetails(issue.key, newSummary, newDescription).fold(
+                    onSuccess = {
+                        ApplicationManager.getApplication().invokeLater {
+                            saveChangesButton.text = "💾 Save Changes"
+                            refreshIssues()
+                        }
+                    },
+                    onFailure = { error ->
+                        ApplicationManager.getApplication().invokeLater {
+                            saveChangesButton.isEnabled = true
+                            saveChangesButton.text = "💾 Save Changes"
+                            Messages.showErrorDialog(project, "Failed to save changes:\n${error.message}", "Error")
+                        }
+                    }
+                )
             }
         })
     }

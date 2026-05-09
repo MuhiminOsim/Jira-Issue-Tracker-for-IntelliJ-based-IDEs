@@ -59,8 +59,8 @@
 
             <action id="JiraPlugin.CreateIssue"
                     class="com.app.jiraplugin.actions.CreateIssueAction"
-                    text="Create Issue (Browser)"
-                    description="Open Jira issue creation page in browser"/>
+                    text="Create Issue..."
+                    description="Open dialog to create a new Jira issue"/>
 
             <action id="JiraPlugin.OpenBoard"
                     class="com.app.jiraplugin.actions.OpenBoardAction"

@@ -201,7 +201,16 @@ class JiraFilterDialog(
                     FilterCategory.FIX_VERSIONS -> loadData(requestToken, { JiraApiClient.instance.getProjectVersions(projectKey) }, { it.reversed().map { v -> v.name }.distinct() })
                     FilterCategory.PARENT -> loadData(requestToken, { JiraApiClient.instance.searchIssues("project = \"$projectKey\" AND issuetype = Epic ORDER BY updated DESC", 50) }, { it.issues.map { i -> "${i.key}: ${i.fields.summary}" }.distinct() })
                     FilterCategory.SPRINT -> loadSprints(requestToken)
-                    FilterCategory.ASSIGNEE -> loadData(requestToken, { JiraApiClient.instance.getAssignableUsers(projectKey) }, { it.map { u -> u.displayName }.distinct().sorted() })
+                    FilterCategory.ASSIGNEE -> loadData(requestToken, { JiraApiClient.instance.getAssignableUsers(projectKey) }, { users -> 
+                        val connectedEmail = com.app.jiraplugin.settings.JiraSettingsState.instance.email.lowercase()
+                        val connectedUser = users.find { it.emailAddress?.lowercase() == connectedEmail }
+                        val sortedNames = users.map { it.displayName }.distinct().sorted().toMutableList()
+                        if (connectedUser != null) {
+                            sortedNames.remove(connectedUser.displayName)
+                            sortedNames.add(0, connectedUser.displayName)
+                        }
+                        sortedNames
+                    })
                     FilterCategory.WORK_TYPE -> loadData(requestToken, { JiraApiClient.instance.getIssueTypes() }, { it.map { t -> t.name }.distinct().sorted() })
                     FilterCategory.LABELS -> loadData(requestToken, { JiraApiClient.instance.getLabels() }, { it.sorted() })
                     FilterCategory.STATUS -> loadData(requestToken, { JiraApiClient.instance.getProjectStatuses(projectKey) }, { it.map { s -> s.name }.distinct().sorted() })

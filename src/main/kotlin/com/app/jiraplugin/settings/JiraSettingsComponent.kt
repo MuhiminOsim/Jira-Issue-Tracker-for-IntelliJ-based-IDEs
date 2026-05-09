@@ -1,5 +1,10 @@
 package com.app.jiraplugin.settings
 
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.dsl.builder.AlignX
@@ -31,6 +36,11 @@ class JiraSettingsComponent {
                         .align(AlignX.FILL)
                         .comment("Generate from Atlassian Account Settings")
                 }
+                row {
+                    button("Test Connection") {
+                        testConnection()
+                    }
+                }
             }
             group("Query Settings") {
                 row("Default JQL:") {
@@ -40,6 +50,34 @@ class JiraSettingsComponent {
                 }
             }
         }
+    }
+
+    private fun testConnection() {
+        val url = jiraUrl
+        val emailText = email
+        val token = apiToken
+        
+        if (url.isBlank() || emailText.isBlank() || token.isBlank()) {
+            Messages.showErrorDialog("Please fill in URL, Email, and API Token first.", "Error")
+            return
+        }
+        
+        ProgressManager.getInstance().run(object : Task.Backgroundable(null, "Testing Connection", true) {
+            override fun run(indicator: ProgressIndicator) {
+                com.app.jiraplugin.api.JiraApiClient.instance.testConnection(url, emailText, token).fold(
+                    onSuccess = {
+                        ApplicationManager.getApplication().invokeLater {
+                            Messages.showInfoMessage("Connection successful!", "Success")
+                        }
+                    },
+                    onFailure = { error ->
+                        ApplicationManager.getApplication().invokeLater {
+                            Messages.showErrorDialog("Connection failed: ${error.message}", "Error")
+                        }
+                    }
+                )
+            }
+        })
     }
 
     val preferredFocusedComponent: javax.swing.JComponent

@@ -287,4 +287,128 @@ class JiraApiClient {
             Result.failure(e)
         }
     }
+
+    fun testConnection(url: String, email: String, token: String): Result<Unit> {
+        return try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .addInterceptor { chain ->
+                    val auth = Credentials.basic(email, token)
+                    val request = chain.request().newBuilder()
+                        .addHeader("Authorization", auth)
+                        .addHeader("Accept", "application/json")
+                        .build()
+                    chain.proceed(request)
+                }.build()
+
+            val tempApi = Retrofit.Builder()
+                .baseUrl(url.trimEnd('/') + "/")
+                .client(client)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+                .create(JiraApi::class.java)
+
+            val response = tempApi.testConnection().execute()
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(RuntimeException("Connection failed: ${response.code()} ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun updateIssueDetails(issueKey: String, summary: String, description: String): Result<Unit> {
+        return try {
+            val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
+            
+            val descriptionAdf = JiraAdfDocument(
+                type = "doc",
+                version = 1,
+                content = listOf(
+                    JiraAdfBlock(
+                        type = "paragraph",
+                        content = listOf(
+                            JiraAdfInline(type = "text", text = description.takeIf { it.isNotEmpty() } ?: " ")
+                        )
+                    )
+                )
+            )
+
+            val request = JiraUpdateIssueRequest(
+                fields = mapOf(
+                    "summary" to summary,
+                    "description" to descriptionAdf
+                )
+            )
+            
+            val response = api.updateIssue(issueKey, request).execute()
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorMsg = response.errorBody()?.string() ?: response.message()
+                Result.failure(RuntimeException("Failed to update issue: ${response.code()} $errorMsg"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun createIssue(
+        projectKey: String, 
+        issueTypeName: String, 
+        summary: String, 
+        description: String,
+        priorityId: String?,
+        assigneeAccountId: String?,
+        originalEstimate: String?
+    ): Result<String> {
+        return try {
+            val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
+            
+            val descriptionAdf = JiraAdfDocument(
+                type = "doc",
+                version = 1,
+                content = listOf(
+                    JiraAdfBlock(
+                        type = "paragraph",
+                        content = listOf(
+                            JiraAdfInline(type = "text", text = description.takeIf { it.isNotEmpty() } ?: " ")
+                        )
+                    )
+                )
+            )
+
+            val fields = mutableMapOf<String, Any>(
+                "project" to mapOf("key" to projectKey),
+                "summary" to summary,
+                "description" to descriptionAdf,
+                "issuetype" to mapOf("name" to issueTypeName)
+            )
+            
+            if (priorityId != null && priorityId.isNotBlank()) {
+                fields["priority"] = mapOf("id" to priorityId)
+            }
+            if (assigneeAccountId != null && assigneeAccountId.isNotBlank()) {
+                fields["assignee"] = mapOf("accountId" to assigneeAccountId)
+            }
+            if (originalEstimate != null && originalEstimate.isNotBlank()) {
+                fields["timetracking"] = mapOf("originalEstimate" to originalEstimate)
+            }
+
+            val request = JiraCreateIssueRequest(fields)
+            
+            val response = api.createIssue(request).execute()
+            if (response.isSuccessful) {
+                Result.success(response.body()?.key ?: "")
+            } else {
+                val errorMsg = response.errorBody()?.string() ?: response.message()
+                Result.failure(RuntimeException("Failed to create issue: ${response.code()} $errorMsg"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

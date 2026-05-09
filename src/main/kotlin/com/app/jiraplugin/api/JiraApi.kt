@@ -74,4 +74,10 @@ interface JiraApi {
 
     @GET("rest/api/3/project/{projectKeyOrId}/statuses")
     fun getProjectStatuses(@Path("projectKeyOrId") projectKey: String): Call<List<JiraIssueTypeStatuses>>
+
+    @POST("rest/api/3/issue")
+    fun createIssue(@Body request: JiraCreateIssueRequest): Call<JiraCreateIssueResponse>
+
+    @GET("rest/api/3/myself")
+    fun testConnection(): Call<JiraUser>
 }

@@ -295,3 +295,14 @@ data class JiraIssueTypeStatuses(
     val name: String,
     val statuses: List<JiraStatus>
 )
+
+// For creating issues
+data class JiraCreateIssueRequest(
+    val fields: Map<String, Any>
+)
+
+data class JiraCreateIssueResponse(
+    val id: String,
+    val key: String,
+    val self: String
+)
