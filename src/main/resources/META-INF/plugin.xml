@@ -1,20 +1,37 @@
 <idea-plugin>
     <id>com.app.jiraplugin.JiraIntegration</id>
     <name>Jira Issue Tracker</name>
-    <vendor email="support@example.com" url="https://example.com">com.app</vendor>
+    <vendor email="osim@example.com" url="https://github.com/MuhiminOsim">Muhimin Osim</vendor>
     <description><![CDATA[
-      <h2>Jira Issue Tracker</h2>
-      <p>View, update, and manage Jira issues directly from the IDE.</p>
+      <h1>🚀 Jira Issue Tracker</h1>
+      <p>Streamline your workflow by managing Jira issues directly within your development environment. This high-performance, feature-rich plugin is designed for developers who want to minimize context switching.</p>
+
+      <h3>✨ Key Features</h3>
       <ul>
-        <li>Browse issues using JQL queries</li>
-        <li>View issue details (status, priority, assignee, description)</li>
-        <li>Add comments to issues</li>
-        <li>Transition issues between statuses</li>
-        <li>Log work time on issues</li>
-        <li>Quick-create issues via browser</li>
-        <li>Open issues and boards in browser</li>
+        <li><strong>Smart Browsing:</strong> Search and filter issues using custom JQL queries.</li>
+        <li><strong>Detailed View:</strong> Access full descriptions (with ADF support), status, priority, and assignee information.</li>
+        <li><strong>Seamless Interaction:</strong> Add comments, transition statuses, and update issue summaries/descriptions directly.</li>
+        <li><strong>Sprint Association:</strong> Quickly move issues to active or future sprints via the integrated Agile board support.</li>
+        <li><strong>Double-Click Toggle:</strong> Instantly show or hide the detail panel by double-clicking any issue in the list.</li>
+        <li><strong>Session Persistence:</strong> The plugin remembers your last selected workspace/project so you can pick up exactly where you left off.</li>
       </ul>
+
+      <h3>🚀 Getting Started</h3>
+      <p>Configure your connection in <strong>Settings → Tools → Jira Issue Tracker</strong> by providing your Jira URL, Email, and API Token.</p>
     ]]></description>
+
+    <change-notes><![CDATA[
+      <ul>
+        <li><b>1.1.1</b>
+          <ul>
+            <li>Added option to associate existing issues with sprints directly from the details panel.</li>
+            <li>Implemented double-click to toggle (show/hide) the issue details panel.</li>
+            <li>Added persistence for the last selected space/project across IDE restarts.</li>
+            <li>UI refinements and improved detail panel layout.</li>
+          </ul>
+        </li>
+      </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
 
