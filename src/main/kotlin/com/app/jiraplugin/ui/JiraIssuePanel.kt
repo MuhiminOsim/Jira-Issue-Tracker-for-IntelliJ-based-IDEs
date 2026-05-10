@@ -65,6 +65,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
     private val issueStatusLabel = JLabel()
     private val issuePriorityLabel = JLabel()
     private val issueAssigneeLabel = JLabel()
+    private val issueSprintLabel = JLabel()
     private val issueDescriptionArea = JTextArea().apply {
         isEditable = true
         lineWrap = true
@@ -84,7 +85,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
     private val logTimeButton = JButton("⏱ Log Time")
     private val refreshButton = JButton("Refresh")
     private val createIssueButton = JButton("➕ Create Issue")
-    private val toggleDetailButton = JButton("📋 Show Details")
+    private val changeSprintButton = JButton("🏃 Change Sprint")
     private val openInBrowserButton = JButton("🌐 Open in Browser")
     private val saveChangesButton = JButton("💾 Save Changes").apply {
         isEnabled = false
@@ -130,10 +131,6 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             c.gridx = 4
             c.insets = JBUI.insetsLeft(8)
             add(createIssueButton, c)
-
-            c.gridx = 5
-            c.weightx = 0.0
-            add(toggleDetailButton, c)
         }
 
         // --- Issue List Container ---
@@ -188,6 +185,9 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             c.gridy = 3
             c.gridx = 0
             add(createMetaRow("Assignee", issueAssigneeLabel), c)
+            
+            c.gridx = 1
+            add(createMetaRow("Sprint", issueSprintLabel), c)
         }
 
         val descPanel = JPanel(BorderLayout()).apply {
@@ -231,8 +231,10 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             add(logTimeButton, c)
             c.gridx++
             c.weightx = 1.0
-            c.gridwidth = 2
+            c.gridwidth = 1
             add(openInBrowserButton, c)
+            c.gridx++
+            add(changeSprintButton, c)
         }
 
         detailPanel.add(detailHeader, BorderLayout.NORTH)
@@ -274,7 +276,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         transitionButton.addActionListener { changeStatus() }
         logTimeButton.addActionListener { logTime() }
         openInBrowserButton.addActionListener { openInBrowser() }
-        toggleDetailButton.addActionListener { toggleDetailPanel() }
+        changeSprintButton.addActionListener { changeSprint() }
         saveChangesButton.addActionListener { saveIssueDetails() }
 
         val docListener = object : DocumentListener {
@@ -284,6 +286,17 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         issueSummaryArea.document.addDocumentListener(docListener)
         issueDescriptionArea.document.addDocumentListener(docListener)
+
+        issueSprintLabel.apply {
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent) {
+                    if (SwingUtilities.isLeftMouseButton(e)) {
+                        changeSprint()
+                    }
+                }
+            })
+        }
 
         searchField.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: DocumentEvent) = applyLocalFilter()
@@ -297,9 +310,11 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                 val selectedProjectStr = projectFilter.selectedItem as? String
                 if (selectedProjectStr != null && selectedProjectStr != "Select Space...") {
                     val projectKey = selectedProjectStr.substringBefore(" - ")
+                    JiraSettingsState.instance.selectedProjectKey = projectKey
                     activeFilters.clear() // Reset filters when changing space
                     updateAssigneeFilterOptions(projectKey)
                 } else {
+                    JiraSettingsState.instance.selectedProjectKey = ""
                     activeFilters.clear()
                     refreshIssues()
                 }
@@ -322,10 +337,8 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
     private fun toggleDetailPanel() {
         if (splitter.secondComponent == null) {
             splitter.secondComponent = detailPanel
-            toggleDetailButton.text = "📋 Hide Details"
         } else {
             splitter.secondComponent = null
-            toggleDetailButton.text = "📋 Show Details"
         }
         splitter.revalidate()
         splitter.repaint()
@@ -380,12 +393,14 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         issueStatusLabel.text = issue.fields.getStatusName()
         issuePriorityLabel.text = issue.fields.getPriorityName()
         issueAssigneeLabel.text = issue.fields.getAssigneeName()
+        issueSprintLabel.text = issue.fields.getSprintNames()
         issueDescriptionArea.text = issue.fields.getDescriptionText()
 
         commentButton.isEnabled = true
         transitionButton.isEnabled = true
         logTimeButton.isEnabled = true
         openInBrowserButton.isEnabled = true
+        changeSprintButton.isEnabled = true
         saveChangesButton.isEnabled = false
         
         isProgrammaticUpdate = false
@@ -401,12 +416,14 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         issueStatusLabel.text = "-"
         issuePriorityLabel.text = "-"
         issueAssigneeLabel.text = "-"
+        issueSprintLabel.text = "-"
         issueDescriptionArea.text = ""
 
         commentButton.isEnabled = false
         transitionButton.isEnabled = false
         logTimeButton.isEnabled = false
         openInBrowserButton.isEnabled = false
+        changeSprintButton.isEnabled = false
         saveChangesButton.isEnabled = false
         isProgrammaticUpdate = false
     }
@@ -427,7 +444,18 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                             projectFilter.removeAllItems()
                             projectFilter.addItem("Select Space...")
                             allProjects.forEach { projectFilter.addItem("${it.key} - ${it.name}") }
-                            if (current != null) projectFilter.selectedItem = current
+                            
+                            val savedKey = JiraSettingsState.instance.selectedProjectKey
+                            if (savedKey.isNotBlank()) {
+                                for (i in 0 until projectFilter.itemCount) {
+                                    if (projectFilter.getItemAt(i).startsWith(savedKey)) {
+                                        projectFilter.selectedIndex = i
+                                        break
+                                    }
+                                }
+                            } else if (current != null) {
+                                projectFilter.selectedItem = current
+                            }
                             isUpdatingFilters = false
                             statusLabel.text = "Select a space to view issues."
                         }
@@ -636,6 +664,56 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         })
     }
 
+    private fun changeSprint(issue: JiraIssue? = selectedIssue) {
+        val target = issue ?: return
+        val projectKey = target.key.substringBefore("-")
+        
+        statusLabel.text = "Loading sprints for $projectKey..."
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Sprints", true) {
+            override fun run(indicator: ProgressIndicator) {
+                JiraApiClient.instance.getBoards(projectKey).fold(
+                    onSuccess = { boards ->
+                        val board = boards.firstOrNull()
+                        if (board != null) {
+                            JiraApiClient.instance.getSprints(board.id).fold(
+                                onSuccess = { sprints ->
+                                    ApplicationManager.getApplication().invokeLater {
+                                        val filtered = sprints.filter { it.state != "closed" }
+                                        val names = filtered.map { it.name }.toTypedArray()
+                                        val selected = Messages.showEditableChooseDialog("Select Sprint for ${target.key}:", "Change Sprint", Messages.getQuestionIcon(), names, target.fields.getSprintNames().split(", ").firstOrNull() ?: "", null) ?: return@invokeLater
+                                        val sprint = filtered.find { it.name == selected } ?: return@invokeLater
+                                        
+                                        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Moving Issue to Sprint", true) {
+                                            override fun run(indicator: ProgressIndicator) {
+                                                JiraApiClient.instance.moveIssueToSprint(target.key, sprint.id).onSuccess {
+                                                    refreshIssues()
+                                                }
+                                            }
+                                        })
+                                    }
+                                },
+                                onFailure = { error ->
+                                    ApplicationManager.getApplication().invokeLater {
+                                        Messages.showErrorDialog(project, "Failed to load sprints: ${error.message}", "Error")
+                                    }
+                                }
+                            )
+                        } else {
+                            ApplicationManager.getApplication().invokeLater {
+                                Messages.showErrorDialog(project, "No boards found for project $projectKey", "Error")
+                            }
+                        }
+                    },
+                    onFailure = { error ->
+                        ApplicationManager.getApplication().invokeLater {
+                            Messages.showErrorDialog(project, "Failed to load boards: ${error.message}", "Error")
+                        }
+                    }
+                )
+            }
+        })
+    }
+
     private fun openInBrowser() {
         selectedIssue?.let {
             com.intellij.ide.BrowserUtil.browse("${JiraSettingsState.instance.jiraUrl.trimEnd('/')}/browse/${it.key}")
@@ -771,9 +849,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                     if (SwingUtilities.isLeftMouseButton(e)) {
                         selectRow(this@IssueRowComponent)
                         if (e.clickCount == 2) {
-                            if (splitter.secondComponent == null) {
-                                toggleDetailPanel()
-                            }
+                            toggleDetailPanel()
                         }
                     }
                 }

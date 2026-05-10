@@ -78,6 +78,12 @@ interface JiraApi {
     @POST("rest/api/3/issue")
     fun createIssue(@Body request: JiraCreateIssueRequest): Call<JiraCreateIssueResponse>
 
+    @POST("rest/agile/1.0/sprint/{sprintId}/issue")
+    fun moveIssuesToSprint(
+        @Path("sprintId") sprintId: Int,
+        @Body request: JiraMoveIssuesRequest
+    ): Call<Void>
+
     @GET("rest/api/3/myself")
     fun testConnection(): Call<JiraUser>
 }

@@ -7,7 +7,7 @@ import com.google.gson.annotations.SerializedName
 data class JiraSearchRequest(
     val jql: String,
     val maxResults: Int = 100,
-    val fields: List<String> = listOf("summary", "description", "status", "assignee", "priority", "issuetype", "updated", "timespent", "aggregatetimespent", "parent", "customfield_10001", "timetracking")
+    val fields: List<String> = listOf("summary", "description", "status", "assignee", "priority", "issuetype", "updated", "timespent", "aggregatetimespent", "parent", "customfield_10001", "customfield_10020", "timetracking")
 )
 
 data class JiraSearchResponse(
@@ -37,6 +37,7 @@ data class JiraIssueFields(
     val aggregatetimespent: Long?,
     val parent: JsonElement?,
     @SerializedName("customfield_10001") val epicLink: String?,
+    @SerializedName("customfield_10020") val sprints: List<JiraSprint>?,
     val timetracking: JiraTimeTracking?
 ) {
     fun getSummaryText(): String = summary ?: "No Summary"
@@ -112,6 +113,10 @@ data class JiraIssueFields(
             }
         }
         return epicLink
+    }
+
+    fun getSprintNames(): String {
+        return sprints?.joinToString(", ") { it.name } ?: "None"
     }
 
     private fun getStringFromObject(element: JsonElement?, key: String, default: String?): String? {
@@ -305,4 +310,8 @@ data class JiraCreateIssueResponse(
     val id: String,
     val key: String,
     val self: String
+)
+
+data class JiraMoveIssuesRequest(
+    val issues: List<String>
 )

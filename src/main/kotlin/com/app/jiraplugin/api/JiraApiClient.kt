@@ -411,4 +411,15 @@ class JiraApiClient {
             Result.failure(e)
         }
     }
+
+    fun moveIssueToSprint(issueKey: String, sprintId: Int): Result<Unit> {
+        return try {
+            val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
+            val response = api.moveIssuesToSprint(sprintId, JiraMoveIssuesRequest(listOf(issueKey))).execute()
+            if (response.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to move issue to sprint: ${response.code()}"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

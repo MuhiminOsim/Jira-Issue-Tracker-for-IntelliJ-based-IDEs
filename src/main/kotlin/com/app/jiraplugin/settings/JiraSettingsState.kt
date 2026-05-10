@@ -14,6 +14,7 @@ class JiraSettingsState : PersistentStateComponent<JiraSettingsState> {
     var jiraUrl: String = ""
     var email: String = ""
     var jqlQuery: String = "statusCategory != Done ORDER BY updated DESC"
+    var selectedProjectKey: String = ""
 
     override fun getState(): JiraSettingsState {
         return this
