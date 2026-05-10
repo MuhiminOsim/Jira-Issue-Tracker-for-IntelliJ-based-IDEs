@@ -332,6 +332,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
     inner class BoardTransferHandler : TransferHandler() {
         override fun getSourceActions(c: JComponent): Int = MOVE
 
+        @Suppress("UNCHECKED_CAST")
         override fun createTransferable(c: JComponent): Transferable? {
             val list = c as? JList<JiraIssue> ?: return null
             val issue = list.selectedValue ?: return null
@@ -345,6 +346,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
         override fun importData(support: TransferSupport): Boolean {
             if (!canImport(support)) return false
             
+            @Suppress("UNCHECKED_CAST")
             val list = support.component as? JList<JiraIssue> ?: return false
             val transferable = support.transferable
             val issue = transferable.getTransferData(IssueTransferable.DATA_FLAVOR) as JiraIssue

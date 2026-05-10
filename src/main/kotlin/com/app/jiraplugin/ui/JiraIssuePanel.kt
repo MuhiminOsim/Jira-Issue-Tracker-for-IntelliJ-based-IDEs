@@ -388,7 +388,6 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         ApplicationManager.getApplication().executeOnPooledThread {
             JiraApiClient.instance.getAssignableUsers(projectKey).onSuccess { users ->
                 ApplicationManager.getApplication().invokeLater {
-                    val sortedUsers = users.sortedBy { it.displayName }
                     // Assignee filter is now handled by the advanced filter dialog
                     isUpdatingFilters = false
                     refreshIssues()
