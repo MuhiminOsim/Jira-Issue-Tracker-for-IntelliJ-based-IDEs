@@ -1,6 +1,6 @@
 # 🚀 Jira Issue Tracker for JetBrains IDEs
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/MuhiminOsim/Jira-Issue-Tracker-for-IntelliJ-based-IDEs)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/MuhiminOsim/Jira-Issue-Tracker-for-IntelliJ-based-IDEs)
 [![Platform](https://img.shields.io/badge/platform-JetBrains-orange.svg)](https://plugins.jetbrains.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -17,15 +17,17 @@ Jira Issue Tracker is a high-performance, feature-rich plugin designed for devel
 ## 🌟 Key Features
 
 ### 🛠 Powerful Issue Management
+- **Interactive Sprint Board**: A native Agile board with status columns and real-time synchronization.
+- **Drag-and-Drop Workflow**: Move issue cards between columns to instantly transition Jira statuses.
 - **Smart Browsing**: Search and filter issues using custom JQL queries.
-- **Detailed View**: Access full descriptions (with ADF support), status, priority, and assignee information.
+- **Detailed View**: Access full descriptions, status, priority, and assignee information in a dedicated detail dialog.
 - **Seamless Interaction**: Add comments, transition statuses, and update issue summaries/descriptions directly.
-- **Sprint Association**: Quickly move issues to active or future sprints via the integrated Agile board support.
 
 ### ⚡ Optimized UX
-- **Double-Click Toggle**: Instantly show or hide the detail panel by double-clicking any issue in the list.
-- **Session Persistence**: The plugin remembers your last selected workspace/project so you can pick up exactly where you left off.
-- **Responsive Layout**: A modern, clean interface that fits perfectly within the JetBrains tool window system.
+- **Responsive Toolbar**: Action buttons automatically hide in narrow views to prioritize critical search and space selection.
+- **Double-Click Integration**: Double-click any issue in the list or board to open the detailed view immediately.
+- **Session Persistence**: The plugin remembers your last selected workspace/project across IDE restarts and indexing.
+- **Modern Aesthetics**: A premium, theme-aware interface with rounded cards, badges, and high-contrast visuals.
 
 ### ⏱ Time Tracking & Productivity
 - **Work Logging**: Log your time spent on tasks without leaving the IDE.

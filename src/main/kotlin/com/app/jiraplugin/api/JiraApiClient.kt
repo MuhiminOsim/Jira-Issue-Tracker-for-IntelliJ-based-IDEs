@@ -20,6 +20,7 @@ class JiraApiClient {
     private val projectBoardsCache = mutableMapOf<String, List<JiraBoard>>()
     private val sprintCache = mutableMapOf<Int, List<JiraSprint>>()
     private val versionCache = mutableMapOf<String, List<JiraVersion>>()
+    private val boardConfigCache = mutableMapOf<Int, JiraBoardConfiguration>()
 
     companion object {
         val instance: JiraApiClient by lazy { JiraApiClient() }
@@ -255,6 +256,21 @@ class JiraApiClient {
                 sprintCache[boardId] = sprints
                 Result.success(sprints)
             } else Result.failure(Exception("Failed to fetch sprints"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun getBoardConfiguration(boardId: Int): Result<JiraBoardConfiguration> {
+        boardConfigCache[boardId]?.let { return Result.success(it) }
+        return try {
+            val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
+            val response = api.getBoardConfiguration(boardId).execute()
+            if (response.isSuccessful) {
+                val config = response.body() ?: throw Exception("Empty board configuration")
+                boardConfigCache[boardId] = config
+                Result.success(config)
+            } else Result.failure(Exception("Failed to fetch board configuration: ${response.code()}"))
         } catch (e: Exception) {
             Result.failure(e)
         }

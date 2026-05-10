@@ -215,7 +215,8 @@ data class JiraTransitionsResponse(
 
 data class JiraTransition(
     val id: String,
-    val name: String
+    val name: String,
+    val to: JiraStatus?
 )
 
 // For logging time
@@ -285,6 +286,25 @@ data class JiraSprint(
     val name: String,
     val state: String,
     val originBoardId: Int?
+)
+
+data class JiraBoardConfiguration(
+    val id: Int,
+    val name: String,
+    val columnConfig: JiraColumnConfig
+)
+
+data class JiraColumnConfig(
+    val columns: List<JiraColumn>
+)
+
+data class JiraColumn(
+    val name: String,
+    val statuses: List<JiraStatusId>
+)
+
+data class JiraStatusId(
+    val id: String
 )
 
 data class JiraVersion(

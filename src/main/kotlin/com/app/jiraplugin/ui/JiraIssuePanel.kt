@@ -42,7 +42,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
 
     // Filtering
     private val searchField = SearchTextField()
-    private val projectFilter = JComboBox<String>(arrayOf("Select Space..."))
+    private val projectFilter = com.intellij.openapi.ui.ComboBox<String>(arrayOf("Select Space..."))
     private val filterButton = JButton("Filter", AllIcons.General.Filter)
     
     private var activeFilters = mutableMapOf<FilterCategory, List<String>>()
@@ -113,13 +113,18 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                 weightx = 1.0
                 insets = JBUI.insetsRight(8)
             }
-            c.weightx = 1.0
+            c.weightx = 0.4
             c.gridx = 0
+            searchField.minimumSize = Dimension(80, searchField.preferredSize.height)
             add(searchField, c)
             
-            c.weightx = 0.0
+            c.weightx = 0.5
             c.gridx = 1
-            projectFilter.prototypeDisplayValue = "Select Space XXXXXXXXXXXXXXXXX"
+            projectFilter.apply {
+                prototypeDisplayValue = "Select Space: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                minimumSize = Dimension(150, preferredSize.height)
+                preferredSize = Dimension(200, preferredSize.height)
+            }
             add(projectFilter, c)
             
             c.gridx = 2
@@ -131,6 +136,20 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             c.gridx = 4
             c.insets = JBUI.insetsLeft(8)
             add(createIssueButton, c)
+            
+            addComponentListener(object : java.awt.event.ComponentAdapter() {
+                override fun componentResized(e: java.awt.event.ComponentEvent) {
+                    val width = this@apply.width
+                    // If width is too small, hide extra buttons to keep search and project selector visible
+                    val showExtra = width > 600
+                    filterButton.isVisible = showExtra
+                    refreshButton.isVisible = showExtra
+                    createIssueButton.isVisible = showExtra
+                    
+                    // Revalidate to update layout
+                    this@apply.revalidate()
+                }
+            })
         }
 
         // --- Issue List Container ---
@@ -446,18 +465,26 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                             allProjects.forEach { projectFilter.addItem("${it.key} - ${it.name}") }
                             
                             val savedKey = JiraSettingsState.instance.selectedProjectKey
+                            var projectMatched = false
                             if (savedKey.isNotBlank()) {
                                 for (i in 0 until projectFilter.itemCount) {
                                     if (projectFilter.getItemAt(i).startsWith(savedKey)) {
                                         projectFilter.selectedIndex = i
+                                        projectMatched = true
                                         break
                                     }
                                 }
                             } else if (current != null) {
                                 projectFilter.selectedItem = current
+                                projectMatched = true
                             }
                             isUpdatingFilters = false
-                            statusLabel.text = "Select a space to view issues."
+                            
+                            if (projectMatched) {
+                                refreshIssues()
+                            } else {
+                                statusLabel.text = "Select a space to view issues."
+                            }
                         }
                     },
                     onFailure = { error ->

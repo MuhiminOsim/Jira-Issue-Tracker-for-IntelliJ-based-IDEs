@@ -22,9 +22,32 @@ class JiraToolWindowFactory : ToolWindowFactory {
 
         if (isConfigured) {
             val issuePanel = JiraIssuePanel(project)
-            val content = contentFactory.createContent(issuePanel, "Issues", false)
-            toolWindow.contentManager.addContent(content)
-            issuePanel.refreshIssues()
+            val boardPanel = JiraBoardPanel(project)
+            
+            val issuesContent = contentFactory.createContent(issuePanel, "Issues", false)
+            val boardContent = contentFactory.createContent(boardPanel, "Board", false)
+            
+            toolWindow.contentManager.addContent(issuesContent)
+            toolWindow.contentManager.addContent(boardContent)
+            
+            // Wait for indexing to complete if needed
+            com.intellij.openapi.project.DumbService.getInstance(project).runWhenSmart {
+                issuePanel.refreshIssues()
+            }
+            
+            // Refresh board when selected
+            toolWindow.contentManager.addContentManagerListener(object : com.intellij.ui.content.ContentManagerListener {
+                override fun selectionChanged(event: com.intellij.ui.content.ContentManagerEvent) {
+                    if (event.content == boardContent) {
+                        val savedKey = JiraSettingsState.instance.selectedProjectKey
+                        if (savedKey.isNotBlank()) {
+                            com.intellij.openapi.project.DumbService.getInstance(project).runWhenSmart {
+                                boardPanel.refreshBoard(savedKey)
+                            }
+                        }
+                    }
+                }
+            })
         } else {
             val onboardingPanel = JiraOnboardingPanel {
                 // When connected successfully, re-render

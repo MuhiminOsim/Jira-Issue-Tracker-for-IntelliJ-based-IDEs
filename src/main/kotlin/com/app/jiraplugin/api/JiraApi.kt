@@ -69,6 +69,9 @@ interface JiraApi {
     @GET("rest/agile/1.0/board/{boardId}/sprint")
     fun getSprints(@Path("boardId") boardId: Int): Call<JiraSprintResponse>
 
+    @GET("rest/agile/1.0/board/{boardId}/configuration")
+    fun getBoardConfiguration(@Path("boardId") boardId: Int): Call<JiraBoardConfiguration>
+
     @GET("rest/api/3/project/{projectKeyOrId}/versions")
     fun getProjectVersions(@Path("projectKeyOrId") projectKey: String): Call<List<JiraVersion>>
 
