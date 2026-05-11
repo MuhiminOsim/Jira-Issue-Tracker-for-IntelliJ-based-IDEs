@@ -6,8 +6,6 @@
 
 **Streamline your workflow by managing Jira issues directly within your development environment.**
 
-![Jira Plugin Mockup](/Users/osim/.gemini/antigravity/brain/bf120266-8296-41a7-a040-e8723ef7c272/jira_plugin_mockup_1778429697628.png)
-
 ---
 
 ## ✨ Overview
