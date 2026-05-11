@@ -22,6 +22,11 @@
 
     <change-notes><![CDATA[
       <ul>
+        <li><b>1.2.1</b>
+          <ul>
+            <li>Brand new geometric Jira-inspired plugin icon for both Light and Dark themes.</li>
+          </ul>
+        </li>
         <li><b>1.2.0</b>
           <ul>
             <li>Introduced Interactive Agile Board with drag-and-drop status transitions.</li>

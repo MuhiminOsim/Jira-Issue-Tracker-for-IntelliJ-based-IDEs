@@ -1,0 +1,10 @@
+<svg width="40" height="40" viewBox="-4 -4 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Bottom Left Piece (Geometric straight edges, rounded corners) -->
+  <path fill="#0052CC" d="M 11.57 11.51 L 1.0 11.51 a 1.0 1.0 0 0 0 -1.0 1.0 L 0.0 15.73 a 1.0 1.0 0 0 0 1.0 1.0 L 6.36 16.73 a 1.0 1.0 0 0 1 1.0 1.0 L 7.36 23.0 a 1.0 1.0 0 0 0 1.0 1.0 L 11.57 24.0 a 1.0 1.0 0 0 0 1.0 -1.0 L 12.57 12.51 a 1.0 1.0 0 0 0 -1.0 -1.0 Z"/>
+  
+  <!-- Middle Piece (Geometric straight edges, rounded corners) -->
+  <path fill="#2684FF" d="M 17.3 5.76 L 6.74 5.76 a 1.0 1.0 0 0 0 -1.0 1.0 L 5.74 9.97 a 1.0 1.0 0 0 0 1.0 1.0 L 12.08 10.97 a 1.0 1.0 0 0 1 1.0 1.0 L 13.08 17.24 a 1.0 1.0 0 0 0 1.0 1.0 L 17.3 18.24 a 1.0 1.0 0 0 0 1.0 -1.0 L 18.3 6.76 a 1.0 1.0 0 0 0 -1.0 -1.0 Z"/>
+  
+  <!-- Top Right Piece (Geometric straight edges, rounded corners) -->
+  <path fill="#4C9AFF" d="M 23.0 0 L 12.46 0 a 1.0 1.0 0 0 0 -1.0 1.0 L 11.46 4.22 a 1.0 1.0 0 0 0 1.0 1.0 L 17.8 5.22 a 1.0 1.0 0 0 1 1.0 1.0 L 18.8 11.48 a 1.0 1.0 0 0 0 1.0 1.0 L 23.0 12.48 a 1.0 1.0 0 0 0 1.0 -1.0 L 24.0 1.0 a 1.0 1.0 0 0 0 -1.0 -1.0 Z"/>
+</svg>
