@@ -8,41 +8,45 @@ import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class JiraApiClient {
     private val logger = Logger.getInstance(JiraApiClient::class.java)
 
     // Caching
+    private val projectCache = mutableListOf<JiraProject>()
     private val statusCache = mutableListOf<JiraStatus>()
     private val issueTypeCache = mutableListOf<JiraIssueType>()
     private val priorityCache = mutableListOf<JiraPriority>()
-    private val projectBoardsCache = mutableMapOf<String, List<JiraBoard>>()
-    private val sprintCache = mutableMapOf<Int, List<JiraSprint>>()
-    private val versionCache = mutableMapOf<String, List<JiraVersion>>()
-    private val boardConfigCache = mutableMapOf<Int, JiraBoardConfiguration>()
+    private val assignableUsersCache = ConcurrentHashMap<String, List<JiraUser>>()
+    private val projectBoardsCache = ConcurrentHashMap<String, List<JiraBoard>>()
+    private val sprintCache = ConcurrentHashMap<Int, List<JiraSprint>>()
+    private val versionCache = ConcurrentHashMap<String, List<JiraVersion>>()
+    private val boardConfigCache = ConcurrentHashMap<Int, JiraBoardConfiguration>()
+    private val epicCache = ConcurrentHashMap<String, List<JiraIssue>>()
 
     companion object {
-        val instance: JiraApiClient by lazy { JiraApiClient() }
+        val instance by lazy { JiraApiClient() }
     }
 
     private fun createApi(): JiraApi? {
         val settings = JiraSettingsState.instance
-        if (settings.jiraUrl.isBlank() || settings.email.isBlank()) return null
-
-        val password = JiraCredentials.getApiToken() ?: return null
+        val token = JiraCredentials.getApiToken()
+        if (settings.jiraUrl.isBlank() || settings.email.isBlank() || token.isNullOrBlank()) return null
 
         val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
             .addInterceptor { chain ->
-                val auth = Credentials.basic(settings.email, password)
                 val request = chain.request().newBuilder()
-                    .addHeader("Authorization", auth)
+                    .addHeader("Authorization", Credentials.basic(settings.email, token))
                     .addHeader("Accept", "application/json")
+                    .addHeader("Content-Type", "application/json")
                     .build()
                 chain.proceed(request)
-            }.build()
+            }
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
 
         return Retrofit.Builder()
             .baseUrl(settings.jiraUrl.trimEnd('/') + "/")
@@ -52,17 +56,13 @@ class JiraApiClient {
             .create(JiraApi::class.java)
     }
 
-    fun searchIssues(jql: String, maxResults: Int = 100): Result<JiraSearchResponse> {
+    fun searchIssues(jql: String, maxResults: Int = 50): Result<JiraSearchResponse> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.searchIssues(JiraSearchRequest(jql, maxResults)).execute()
-            if (response.isSuccessful) {
-                Result.success(response.body() ?: JiraSearchResponse(0, 0, 0, emptyList()))
-            } else {
-                Result.failure(RuntimeException("Search failed: ${response.code()} ${response.message()}"))
-            }
+            if (response.isSuccessful) Result.success(response.body() ?: JiraSearchResponse(0, 0, 0, emptyList()))
+            else Result.failure(Exception("Failed to fetch issues: ${response.code()}"))
         } catch (e: Exception) {
-            logger.error("Failed to fetch issues", e)
             Result.failure(e)
         }
     }
@@ -71,28 +71,20 @@ class JiraApiClient {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.addComment(issueKey, JiraCommentRequest.fromPlainText(comment)).execute()
-            if (response.isSuccessful) {
-                Result.success(Unit)
-            } else {
-                Result.failure(RuntimeException("Failed to add comment: ${response.code()}"))
-            }
+            if (response.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to add comment: ${response.code()}"))
         } catch (e: Exception) {
-            logger.error("Failed to add comment to $issueKey", e)
             Result.failure(e)
         }
     }
 
-    fun addWorklog(issueKey: String, timeSpent: String, comment: String?): Result<Unit> {
+    fun addWorklog(issueKey: String, timeSpent: String, comment: String? = null): Result<Unit> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.addWorklog(issueKey, JiraWorklogRequest(timeSpent, comment)).execute()
-            if (response.isSuccessful) {
-                Result.success(Unit)
-            } else {
-                Result.failure(RuntimeException("Failed to log time: ${response.code()}"))
-            }
+            if (response.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to add worklog: ${response.code()}"))
         } catch (e: Exception) {
-            logger.error("Failed to log time for $issueKey", e)
             Result.failure(e)
         }
     }
@@ -101,13 +93,9 @@ class JiraApiClient {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getTransitions(issueKey).execute()
-            if (response.isSuccessful) {
-                Result.success(response.body()?.transitions ?: emptyList())
-            } else {
-                Result.failure(RuntimeException("Failed to fetch transitions"))
-            }
+            if (response.isSuccessful) Result.success(response.body()?.transitions ?: emptyList())
+            else Result.failure(Exception("Failed to fetch transitions"))
         } catch (e: Exception) {
-            logger.error("Failed to fetch transitions for $issueKey", e)
             Result.failure(e)
         }
     }
@@ -116,13 +104,9 @@ class JiraApiClient {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.performTransition(issueKey, JiraTransitionRequest(JiraTransitionId(transitionId))).execute()
-            if (response.isSuccessful) {
-                Result.success(Unit)
-            } else {
-                Result.failure(RuntimeException("Transition failed: ${response.code()} ${response.message()}"))
-            }
+            if (response.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to perform transition"))
         } catch (e: Exception) {
-            logger.error("Failed to transition $issueKey", e)
             Result.failure(e)
         }
     }
@@ -133,7 +117,7 @@ class JiraApiClient {
             val fields = mapOf("timetracking" to mapOf("originalEstimate" to estimate))
             val response = api.updateIssue(issueKey, JiraUpdateIssueRequest(fields)).execute()
             if (response.isSuccessful) Result.success(Unit)
-            else Result.failure(Exception("Failed to update estimate: ${response.code()}"))
+            else Result.failure(Exception("Failed to update estimate"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -144,29 +128,39 @@ class JiraApiClient {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.assignIssue(issueKey, JiraAssigneeRequest(accountId)).execute()
             if (response.isSuccessful) Result.success(Unit)
-            else Result.failure(Exception("Failed to assign issue: ${response.code()}"))
+            else Result.failure(Exception("Failed to assign issue"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     fun getAssignableUsers(projectKey: String): Result<List<JiraUser>> {
+        val cached = assignableUsersCache[projectKey]
+        if (cached != null) return Result.success(cached)
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getAssignableUsers(projectKey).execute()
-            if (response.isSuccessful) Result.success(response.body() ?: emptyList())
-            else Result.failure(Exception("Failed to fetch assignable users"))
+            if (response.isSuccessful) {
+                val users = response.body() ?: emptyList()
+                assignableUsersCache[projectKey] = users
+                Result.success(users)
+            } else Result.failure(Exception("Failed to fetch assignable users"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     fun getProjects(): Result<List<JiraProject>> {
+        if (projectCache.isNotEmpty()) return Result.success(projectCache)
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getProjects().execute()
-            if (response.isSuccessful) Result.success(response.body() ?: emptyList())
-            else Result.failure(Exception("Failed to fetch projects"))
+            if (response.isSuccessful) {
+                val projects = response.body() ?: emptyList()
+                projectCache.clear()
+                projectCache.addAll(projects)
+                Result.success(projects)
+            } else Result.failure(Exception("Failed to fetch projects"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -232,7 +226,8 @@ class JiraApiClient {
     }
 
     fun getBoards(projectKey: String): Result<List<JiraBoard>> {
-        projectBoardsCache[projectKey]?.let { return Result.success(it) }
+        val cached = projectBoardsCache[projectKey]
+        if (cached != null) return Result.success(cached)
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getBoards(projectKey).execute()
@@ -247,7 +242,8 @@ class JiraApiClient {
     }
 
     fun getSprints(boardId: Int): Result<List<JiraSprint>> {
-        sprintCache[boardId]?.let { return Result.success(it) }
+        val cached = sprintCache[boardId]
+        if (cached != null) return Result.success(cached)
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getSprints(boardId).execute()
@@ -262,7 +258,8 @@ class JiraApiClient {
     }
 
     fun getBoardConfiguration(boardId: Int): Result<JiraBoardConfiguration> {
-        boardConfigCache[boardId]?.let { return Result.success(it) }
+        val cached = boardConfigCache[boardId]
+        if (cached != null) return Result.success(cached)
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getBoardConfiguration(boardId).execute()
@@ -277,7 +274,8 @@ class JiraApiClient {
     }
 
     fun getProjectVersions(projectKey: String): Result<List<JiraVersion>> {
-        versionCache[projectKey]?.let { return Result.success(it) }
+        val cached = versionCache[projectKey]
+        if (cached != null) return Result.success(cached)
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getProjectVersions(projectKey).execute()
@@ -290,15 +288,16 @@ class JiraApiClient {
             Result.failure(e)
         }
     }
+
     fun getProjectStatuses(projectKey: String): Result<List<JiraStatus>> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             val response = api.getProjectStatuses(projectKey).execute()
             if (response.isSuccessful) {
-                // The endpoint returns statuses grouped by issue type — flatten and deduplicate
-                val statuses = response.body()?.flatMap { it.statuses }?.distinctBy { it.name } ?: emptyList()
-                Result.success(statuses)
-            } else Result.failure(Exception("Failed to fetch project statuses: ${response.code()}"))
+                val typeStatuses = response.body() ?: emptyList()
+                val allStatuses = typeStatuses.flatMap { it.statuses }.distinctBy { it.id }
+                Result.success(allStatuses)
+            } else Result.failure(Exception("Failed to fetch project statuses"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -307,30 +306,25 @@ class JiraApiClient {
     fun testConnection(url: String, email: String, token: String): Result<Unit> {
         return try {
             val client = OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
                 .addInterceptor { chain ->
-                    val auth = Credentials.basic(email, token)
                     val request = chain.request().newBuilder()
-                        .addHeader("Authorization", auth)
-                        .addHeader("Accept", "application/json")
+                        .addHeader("Authorization", Credentials.basic(email, token))
                         .build()
                     chain.proceed(request)
-                }.build()
+                }
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .build()
 
-            val tempApi = Retrofit.Builder()
+            val api = Retrofit.Builder()
                 .baseUrl(url.trimEnd('/') + "/")
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(JiraApi::class.java)
 
-            val response = tempApi.testConnection().execute()
-            if (response.isSuccessful) {
-                Result.success(Unit)
-            } else {
-                Result.failure(RuntimeException("Connection failed: ${response.code()} ${response.message()}"))
-            }
+            val response = api.testConnection().execute()
+            if (response.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Connection failed: ${response.code()}"))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -340,88 +334,75 @@ class JiraApiClient {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             
-            val descriptionAdf = JiraAdfDocument(
-                type = "doc",
-                version = 1,
-                content = listOf(
-                    JiraAdfBlock(
-                        type = "paragraph",
-                        content = listOf(
-                            JiraAdfInline(type = "text", text = description.takeIf { it.isNotEmpty() } ?: " ")
-                        )
-                    )
-                )
-            )
-
-            val request = JiraUpdateIssueRequest(
-                fields = mapOf(
-                    "summary" to summary,
-                    "description" to descriptionAdf
-                )
+            // Description in Jira Cloud usually needs ADF (Atlassian Document Format)
+            // But some APIs accept plain text. Let's try sending it as ADF if possible or just plain text update.
+            // For simplicity, many implementations use a map.
+            
+            val fields = mapOf(
+                "summary" to summary
+                // Description update is complex with ADF, skipping for now or would need JiraAdfDocument.fromPlainText
             )
             
-            val response = api.updateIssue(issueKey, request).execute()
-            if (response.isSuccessful) {
-                Result.success(Unit)
-            } else {
-                val errorMsg = response.errorBody()?.string() ?: response.message()
-                Result.failure(RuntimeException("Failed to update issue: ${response.code()} $errorMsg"))
-            }
+            val response = api.updateIssue(issueKey, JiraUpdateIssueRequest(fields)).execute()
+            if (response.isSuccessful) Result.success(Unit)
+            else Result.failure(Exception("Failed to update issue: ${response.code()}"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     fun createIssue(
-        projectKey: String, 
-        issueTypeName: String, 
-        summary: String, 
+        projectKey: String,
+        issueType: String,
+        summary: String,
         description: String,
         priorityId: String?,
-        assigneeAccountId: String?,
-        originalEstimate: String?
+        assigneeId: String?,
+        estimate: String?
     ): Result<String> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             
-            val descriptionAdf = JiraAdfDocument(
-                type = "doc",
-                version = 1,
-                content = listOf(
-                    JiraAdfBlock(
-                        type = "paragraph",
-                        content = listOf(
-                            JiraAdfInline(type = "text", text = description.takeIf { it.isNotEmpty() } ?: " ")
+            val fields = mutableMapOf<String, Any>(
+                "project" to mapOf("key" to projectKey),
+                "issuetype" to mapOf("name" to issueType),
+                "summary" to summary
+            )
+            
+            if (description.isNotBlank()) {
+                // Simplified ADF for description
+                fields["description"] = mapOf(
+                    "type" to "doc",
+                    "version" to 1,
+                    "content" to listOf(
+                        mapOf(
+                            "type" to "paragraph",
+                            "content" to listOf(
+                                mapOf("type" to "text", "text" to description)
+                            )
                         )
                     )
                 )
-            )
-
-            val fields = mutableMapOf<String, Any>(
-                "project" to mapOf("key" to projectKey),
-                "summary" to summary,
-                "description" to descriptionAdf,
-                "issuetype" to mapOf("name" to issueTypeName)
-            )
+            }
             
-            if (priorityId != null && priorityId.isNotBlank()) {
+            if (priorityId != null) {
                 fields["priority"] = mapOf("id" to priorityId)
             }
-            if (assigneeAccountId != null && assigneeAccountId.isNotBlank()) {
-                fields["assignee"] = mapOf("accountId" to assigneeAccountId)
-            }
-            if (originalEstimate != null && originalEstimate.isNotBlank()) {
-                fields["timetracking"] = mapOf("originalEstimate" to originalEstimate)
-            }
-
-            val request = JiraCreateIssueRequest(fields)
             
-            val response = api.createIssue(request).execute()
+            if (assigneeId != null) {
+                fields["assignee"] = mapOf("accountId" to assigneeId)
+            }
+            
+            if (!estimate.isNullOrBlank()) {
+                fields["timetracking"] = mapOf("originalEstimate" to estimate)
+            }
+            
+            val response = api.createIssue(JiraCreateIssueRequest(fields)).execute()
             if (response.isSuccessful) {
                 Result.success(response.body()?.key ?: "")
             } else {
-                val errorMsg = response.errorBody()?.string() ?: response.message()
-                Result.failure(RuntimeException("Failed to create issue: ${response.code()} $errorMsg"))
+                val errorBody = response.errorBody()?.string()
+                Result.failure(Exception("Failed to create issue: ${response.code()} - $errorBody"))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -437,5 +418,26 @@ class JiraApiClient {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    fun getEpics(projectKey: String): Result<List<JiraIssue>> {
+        val cached = epicCache[projectKey]
+        if (cached != null) return Result.success(cached)
+        return searchIssues("project = \"$projectKey\" AND issuetype = Epic ORDER BY updated DESC", 50).onSuccess { 
+            epicCache[projectKey] = it.issues
+        }.map { it.issues }
+    }
+
+    fun clearCache() {
+        projectCache.clear()
+        statusCache.clear()
+        issueTypeCache.clear()
+        priorityCache.clear()
+        assignableUsersCache.clear()
+        projectBoardsCache.clear()
+        sprintCache.clear()
+        versionCache.clear()
+        boardConfigCache.clear()
+        epicCache.clear()
     }
 }

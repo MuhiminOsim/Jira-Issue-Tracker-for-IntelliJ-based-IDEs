@@ -118,6 +118,7 @@ class JiraOnboardingPanel(private val onConnected: () -> Unit) : JPanel(BorderLa
                         onSuccess = {
                             ApplicationManager.getApplication().invokeLater {
                                 // Save settings
+                                JiraApiClient.instance.clearCache()
                                 val settings = JiraSettingsState.instance
                                 settings.jiraUrl = url
                                 settings.email = email

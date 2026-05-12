@@ -38,12 +38,10 @@ class JiraToolWindowFactory : ToolWindowFactory {
             // Refresh board when selected
             toolWindow.contentManager.addContentManagerListener(object : com.intellij.ui.content.ContentManagerListener {
                 override fun selectionChanged(event: com.intellij.ui.content.ContentManagerEvent) {
-                    if (event.content == boardContent) {
+                    if (event.content == boardContent && toolWindow.contentManager.selectedContent == boardContent) {
                         val savedKey = JiraSettingsState.instance.selectedProjectKey
                         if (savedKey.isNotBlank()) {
-                            com.intellij.openapi.project.DumbService.getInstance(project).runWhenSmart {
-                                boardPanel.refreshBoard(savedKey)
-                            }
+                            boardPanel.refreshBoard(savedKey)
                         }
                     }
                 }

@@ -3,6 +3,7 @@ package com.app.jiraplugin.ui
 import com.app.jiraplugin.api.JiraApiClient
 import com.app.jiraplugin.models.JiraIssue
 import com.app.jiraplugin.models.JiraProject
+import com.app.jiraplugin.models.JiraUser
 import com.app.jiraplugin.settings.JiraSettingsState
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.application.ApplicationManager
@@ -25,7 +26,6 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.imageio.ImageIO
 import javax.swing.*
 import javax.swing.SwingUtilities
-import javax.swing.border.EmptyBorder
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
@@ -43,7 +43,12 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
     // Filtering
     private val searchField = SearchTextField()
     private val projectFilter = com.intellij.openapi.ui.ComboBox<String>(arrayOf("Select Space..."))
-    private val filterButton = JButton("Filter", AllIcons.General.Filter)
+    private val filterButton = JButton("Filter", AllIcons.General.Filter).apply { isFocusable = false }
+
+    private val assigneeFilter = com.intellij.openapi.ui.ComboBox<String>(arrayOf("Assignee: All")).apply { isFocusable = false }
+    private val priorityFilter = com.intellij.openapi.ui.ComboBox<String>(arrayOf("Priority: All")).apply { isFocusable = false }
+    private val workTypeFilter = com.intellij.openapi.ui.ComboBox<String>(arrayOf("Type: All")).apply { isFocusable = false }
+    private val parentFilter = com.intellij.openapi.ui.ComboBox<String>(arrayOf("Parent: All")).apply { isFocusable = false }
     
     private var activeFilters = mutableMapOf<FilterCategory, List<String>>()
     
@@ -82,13 +87,19 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val commentButton = JButton("💬 Add Comment")
     private val transitionButton = JButton("🔄 Change Status")
-    private val logTimeButton = JButton("⏱ Log Time")
-    private val refreshButton = JButton("Refresh")
-    private val createIssueButton = JButton("➕ Create Issue")
-    private val changeSprintButton = JButton("🏃 Change Sprint")
-    private val openInBrowserButton = JButton("🌐 Open in Browser")
+    private val logTimeButton = JButton("⏱ Log Time").apply { isFocusable = false }
+    private val refreshButton = JButton(AllIcons.Actions.Refresh).apply { isFocusable = false }
+    private val resetFiltersButton = JButton("Reset").apply {
+        isVisible = false
+        margin = JBUI.insets(2, 4)
+        cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+        isFocusable = false
+    }
+    private val changeSprintButton = JButton("🏃 Change Sprint").apply { isFocusable = false }
+    private val openInBrowserButton = JButton("🌐 Open in Browser").apply { isFocusable = false }
     private val saveChangesButton = JButton("💾 Save Changes").apply {
         isEnabled = false
+        isFocusable = false
     }
 
     private var selectedIssue: JiraIssue? = null
@@ -105,51 +116,70 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         background = UIUtil.getPanelBackground()
 
         // --- Filter Bar ---
-        val filterPanel = JPanel(GridBagLayout()).apply {
-            border = JBUI.Borders.empty(8, 12)
+        val filterPanel = JPanel(BorderLayout()).apply {
             background = UIUtil.getPanelBackground()
-            val c = GridBagConstraints().apply {
-                fill = GridBagConstraints.HORIZONTAL
-                weightx = 1.0
-                insets = JBUI.insetsRight(8)
-            }
-            c.weightx = 0.4
-            c.gridx = 0
-            searchField.minimumSize = Dimension(80, searchField.preferredSize.height)
-            add(searchField, c)
+            border = JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0)
             
-            c.weightx = 0.5
-            c.gridx = 1
-            projectFilter.apply {
-                prototypeDisplayValue = "Select Space: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-                minimumSize = Dimension(150, preferredSize.height)
-                preferredSize = Dimension(200, preferredSize.height)
-            }
-            add(projectFilter, c)
-            
-            c.gridx = 2
-            add(filterButton, c)
-            
-            c.gridx = 3
-            add(refreshButton, c)
-
-            c.gridx = 4
-            c.insets = JBUI.insetsLeft(8)
-            add(createIssueButton, c)
-            
-            addComponentListener(object : java.awt.event.ComponentAdapter() {
-                override fun componentResized(e: java.awt.event.ComponentEvent) {
-                    val width = this@apply.width
-                    // If width is too small, hide extra buttons to keep search and project selector visible
-                    val showExtra = width > 600
-                    filterButton.isVisible = showExtra
-                    refreshButton.isVisible = showExtra
-                    createIssueButton.isVisible = showExtra
-                    
-                    // Revalidate to update layout
-                    this@apply.revalidate()
+            // Left part: Search + Space Selection + Scrollable Filters
+            val leftContent = JPanel(GridBagLayout()).apply {
+                isOpaque = false
+                val c = GridBagConstraints().apply {
+                    fill = GridBagConstraints.VERTICAL
+                    anchor = GridBagConstraints.WEST
+                    insets = JBUI.insets(8, 12, 8, 8)
                 }
-            })
+                
+                // Search field
+                c.gridx = 0
+                searchField.preferredSize = Dimension(120, searchField.preferredSize.height)
+                searchField.minimumSize = Dimension(120, searchField.preferredSize.height)
+                add(searchField, c)
+
+                // Project/Space Filter
+                c.gridx++
+                projectFilter.prototypeDisplayValue = "Select Space: XXXXXXXXXXX"
+                add(projectFilter, c)
+                
+                // Filter button (Fixed)
+                c.gridx++
+                add(filterButton, c)
+                
+                // Scrollable filters
+                c.gridx++
+                c.weightx = 1.0
+                c.fill = GridBagConstraints.BOTH
+                c.insets = JBUI.emptyInsets()
+                
+                val filtersPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 8)).apply {
+                    isOpaque = false
+                    assigneeFilter.prototypeDisplayValue = "Assignee: XXXXXXXX"
+                    parentFilter.prototypeDisplayValue = "Parent: XXXXXXXXXXXXXX"
+                    add(assigneeFilter)
+                    add(priorityFilter)
+                    add(workTypeFilter)
+                    add(parentFilter)
+                }
+                
+                val scrollFilters = JBScrollPane(filtersPanel).apply {
+                    border = JBUI.Borders.empty()
+                    isOpaque = false
+                    viewport.isOpaque = false
+                    verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER
+                    horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED
+                    preferredSize = Dimension(100, 42)
+                }
+                add(scrollFilters, c)
+            }
+            
+            add(leftContent, BorderLayout.CENTER)
+            
+            // Right part: Reset + Refresh buttons
+            val rightContent = JPanel(FlowLayout(FlowLayout.RIGHT, 12, 8)).apply {
+                isOpaque = false
+                add(resetFiltersButton)
+                add(refreshButton)
+            }
+            add(rightContent, BorderLayout.EAST)
         }
 
         // --- Issue List Container ---
@@ -264,6 +294,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
 
         splitter.firstComponent = listPanel
         // Detail panel hidden by default
+        splitter.secondComponent = null
 
         add(splitter, BorderLayout.CENTER)
     }
@@ -286,10 +317,12 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             loadProjects()
             refreshIssues() 
         }
-        createIssueButton.addActionListener {
-            if (JiraCreateIssueDialog(project).showAndGet()) {
-                refreshIssues()
-            }
+        resetFiltersButton.addActionListener {
+            activeFilters.clear()
+            searchField.text = ""
+            syncCombosFromActiveFilters()
+            resetFiltersButton.isVisible = false
+            refreshIssues()
         }
         commentButton.addActionListener { addComment() }
         transitionButton.addActionListener { changeStatus() }
@@ -317,10 +350,21 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             })
         }
 
+        val comboListener = { _: java.awt.event.ActionEvent ->
+            if (!isProgrammaticUpdate) {
+                updateActiveFiltersFromCombos()
+                refreshIssues()
+            }
+        }
+        assigneeFilter.addActionListener(comboListener)
+        priorityFilter.addActionListener(comboListener)
+        workTypeFilter.addActionListener(comboListener)
+        parentFilter.addActionListener(comboListener)
+
         searchField.addDocumentListener(object : DocumentListener {
-            override fun insertUpdate(e: DocumentEvent) = applyLocalFilter()
-            override fun removeUpdate(e: DocumentEvent) = applyLocalFilter()
-            override fun changedUpdate(e: DocumentEvent) = applyLocalFilter()
+            override fun insertUpdate(e: DocumentEvent) = onSearchChanged()
+            override fun removeUpdate(e: DocumentEvent) = onSearchChanged()
+            override fun changedUpdate(e: DocumentEvent) = onSearchChanged()
         })
         
         filterButton.addActionListener { openFilterDialog() }
@@ -331,14 +375,64 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                     val projectKey = selectedProjectStr.substringBefore(" - ")
                     JiraSettingsState.instance.selectedProjectKey = projectKey
                     activeFilters.clear() // Reset filters when changing space
+                    syncCombosFromActiveFilters()
                     updateAssigneeFilterOptions(projectKey)
                 } else {
                     JiraSettingsState.instance.selectedProjectKey = ""
                     activeFilters.clear()
+                    syncCombosFromActiveFilters()
                     refreshIssues()
                 }
             }
         }
+    }
+
+    private fun updateActiveFiltersFromCombos() {
+        if (isProgrammaticUpdate) return
+        
+        fun updateCategory(category: FilterCategory, combo: com.intellij.openapi.ui.ComboBox<String>, prefix: String) {
+            val selected = (combo.selectedItem as? String) ?: return
+            if (selected == "$prefix: All") {
+                activeFilters.remove(category)
+            } else {
+                val value = if (category == FilterCategory.PARENT) selected.substringBefore(":") else selected
+                activeFilters[category] = listOf(value)
+            }
+        }
+
+        updateCategory(FilterCategory.ASSIGNEE, assigneeFilter, "Assignee")
+        updateCategory(FilterCategory.PRIORITY, priorityFilter, "Priority")
+        updateCategory(FilterCategory.WORK_TYPE, workTypeFilter, "Type")
+        updateCategory(FilterCategory.PARENT, parentFilter, "Parent")
+    }
+
+    private fun syncCombosFromActiveFilters() {
+        isProgrammaticUpdate = true
+        fun syncCombo(category: FilterCategory, combo: com.intellij.openapi.ui.ComboBox<String>) {
+            val selected = activeFilters[category]?.firstOrNull()
+            if (selected == null) {
+                combo.selectedIndex = 0
+            } else {
+                for (i in 0 until combo.itemCount) {
+                    val item = combo.getItemAt(i)
+                    if (item == selected) {
+                        combo.selectedIndex = i
+                        return
+                    }
+                }
+                combo.selectedIndex = 0
+            }
+        }
+        syncCombo(FilterCategory.ASSIGNEE, assigneeFilter)
+        syncCombo(FilterCategory.PRIORITY, priorityFilter)
+        syncCombo(FilterCategory.WORK_TYPE, workTypeFilter)
+        syncCombo(FilterCategory.PARENT, parentFilter)
+        isProgrammaticUpdate = false
+    }
+
+    private fun onSearchChanged() {
+        updateFilterUI()
+        applyLocalFilter()
     }
 
     private fun openFilterDialog() {
@@ -349,6 +443,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         val dialog = JiraFilterDialog(project, projectKey, activeFilters)
         if (dialog.showAndGet()) {
             activeFilters = dialog.getSelectedFilters().toMutableMap()
+            syncCombosFromActiveFilters()
             refreshIssues()
         }
     }
@@ -373,6 +468,13 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         }
         
         issueListContainer.removeAll()
+
+        // Always show Quick Create row if a project is selected
+        val selectedProjectStr = projectFilter.selectedItem as? String
+        if (selectedProjectStr != null && selectedProjectStr != "Select Space...") {
+            issueListContainer.add(CreateIssueRowComponent())
+        }
+        
         filtered.forEach { issue ->
             val row = IssueRowComponent(issue)
             issueListContainer.add(row)
@@ -384,15 +486,77 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         statusLabel.text = "Showing ${filtered.size} of ${allIssues.size} issues"
     }
 
+    private fun updateFilterUI() {
+        val hasFilters = activeFilters.isNotEmpty() || searchField.text.isNotEmpty()
+        resetFiltersButton.isVisible = hasFilters
+        
+        if (activeFilters.isNotEmpty()) {
+            filterButton.foreground = JBColor(Color(0, 82, 204), Color(76, 154, 255))
+            filterButton.text = "Filter •"
+        } else {
+            filterButton.foreground = UIUtil.getLabelForeground()
+            filterButton.text = "Filter"
+        }
+    }
+
     private fun updateAssigneeFilterOptions(projectKey: String) {
+        val currentUserEmail = JiraSettingsState.instance.email.lowercase()
+        
+        // Parallel data fetching with central caching
         ApplicationManager.getApplication().executeOnPooledThread {
+            // Assignees
             JiraApiClient.instance.getAssignableUsers(projectKey).onSuccess { users ->
+                val sortedUsers = users.distinctBy { it.accountId }.sortedWith(compareByDescending<JiraUser> { 
+                    it.emailAddress?.lowercase() == currentUserEmail 
+                }.thenBy { it.displayName })
+                
+                val names = listOf("Assignee: All") + sortedUsers.map { it.displayName }
                 ApplicationManager.getApplication().invokeLater {
-                    // Assignee filter is now handled by the advanced filter dialog
-                    isUpdatingFilters = false
-                    refreshIssues()
+                    isProgrammaticUpdate = true
+                    assigneeFilter.removeAllItems()
+                    names.forEach { assigneeFilter.addItem(it) }
+                    syncCombosFromActiveFilters()
+                    isProgrammaticUpdate = false
                 }
             }
+            
+            // Priorities
+            JiraApiClient.instance.getPriorities().onSuccess { priorities ->
+                val names = listOf("Priority: All") + priorities.map { it.name }.distinct().sorted()
+                ApplicationManager.getApplication().invokeLater {
+                    isProgrammaticUpdate = true
+                    priorityFilter.removeAllItems()
+                    names.forEach { priorityFilter.addItem(it) }
+                    syncCombosFromActiveFilters()
+                    isProgrammaticUpdate = false
+                }
+            }
+            
+            // Issue Types
+            JiraApiClient.instance.getIssueTypes().onSuccess { types ->
+                val names = listOf("Type: All") + types.map { it.name }.distinct().sorted()
+                ApplicationManager.getApplication().invokeLater {
+                    isProgrammaticUpdate = true
+                    workTypeFilter.removeAllItems()
+                    names.forEach { workTypeFilter.addItem(it) }
+                    syncCombosFromActiveFilters()
+                    isProgrammaticUpdate = false
+                }
+            }
+            
+            // Epics (Parents)
+            JiraApiClient.instance.getEpics(projectKey).onSuccess { issues ->
+                val names = listOf("Parent: All") + issues.map { "${it.key}: ${it.fields.summary}" }.distinct()
+                ApplicationManager.getApplication().invokeLater {
+                    isProgrammaticUpdate = true
+                    parentFilter.removeAllItems()
+                    names.forEach { parentFilter.addItem(it) }
+                    syncCombosFromActiveFilters()
+                    isProgrammaticUpdate = false
+                }
+            }
+            
+            ApplicationManager.getApplication().invokeLater { refreshIssues() }
         }
     }
 
@@ -444,6 +608,9 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         changeSprintButton.isEnabled = false
         saveChangesButton.isEnabled = false
         isProgrammaticUpdate = false
+
+        detailPanel.revalidate()
+        detailPanel.repaint()
     }
     
     private fun loadProjects() {
@@ -451,7 +618,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         if (settings.jiraUrl.isBlank()) return
         
         statusLabel.text = "Loading spaces..."
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Jira Spaces", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Jira spaces", true) {
             override fun run(indicator: ProgressIndicator) {
                 JiraApiClient.instance.getProjects().fold(
                     onSuccess = { projects ->
@@ -480,7 +647,10 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                             isUpdatingFilters = false
                             
                             if (projectMatched) {
-                                refreshIssues()
+                                val projectKey = projectFilter.getItemAt(projectFilter.selectedIndex).substringBefore(" - ")
+                                isUpdatingFilters = true
+                                updateAssigneeFilterOptions(projectKey)
+                                isUpdatingFilters = false
                             } else {
                                 statusLabel.text = "Select a space to view issues."
                             }
@@ -502,6 +672,8 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             statusLabel.text = "Please configure Jira settings first."
             return
         }
+
+        updateFilterUI()
 
         val selectedProjectStr = projectFilter.selectedItem as? String
         if (selectedProjectStr == null || selectedProjectStr == "Select Space...") {
@@ -536,10 +708,10 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         // Sorting
         jql += " ORDER BY updated DESC"
 
-        statusLabel.text = "Searching: $jql"
+        statusLabel.text = "Searching..."
         refreshButton.isEnabled = false
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Jira Issues", true) {
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Jira issues", true) {
             override fun run(indicator: ProgressIndicator) {
                 val result = JiraApiClient.instance.searchIssues(jql)
                 ApplicationManager.getApplication().invokeLater {
@@ -548,7 +720,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                         onSuccess = { response ->
                             allIssues = response.issues
                             applyLocalFilter()
-                            statusLabel.text = "Found ${allIssues.size} issues"
+                            statusLabel.text = "Found ${allIssues.size} issues (Last updated: ${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))})"
                         },
                         onFailure = { error ->
                             statusLabel.text = "Error: ${error.message}"
@@ -769,12 +941,60 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         return null
     }
 
+    private inner class CreateIssueRowComponent : JPanel(BorderLayout()) {
+        init {
+            border = JBUI.Borders.compound(
+                JBUI.Borders.customLine(JBColor.border(), 0, 0, 1, 0),
+                JBUI.Borders.empty(8, 20)
+            )
+            // Use a distinct Jira-like background highlight
+            background = JBColor(Color(240, 245, 255), Color(30, 45, 70))
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            maximumSize = Dimension(Int.MAX_VALUE, 45)
+            
+            val label = JLabel("Create Issue", AllIcons.General.Add, SwingConstants.LEFT).apply {
+                font = JBUI.Fonts.label(14f).asBold()
+                foreground = JBColor(Color(0, 82, 204), Color(76, 154, 255))
+                iconTextGap = 12
+            }
+            add(label, BorderLayout.WEST)
+            
+            addMouseListener(object : MouseAdapter() {
+                override fun mousePressed(e: MouseEvent) {
+                    if (SwingUtilities.isLeftMouseButton(e)) {
+                        // Clear regular issue selection
+                        selectedRow?.background = UIUtil.getListBackground()
+                        selectedRow = null
+                        selectedIssue = null
+                        showEmptyDetailState()
+
+                        val selectedProjectStr = projectFilter.selectedItem as? String
+                        val projectKey = if (selectedProjectStr != null && selectedProjectStr != "Select Space...") {
+                            selectedProjectStr.substringBefore(" - ")
+                        } else null
+
+                        if (JiraCreateIssueDialog(project, projectKey).showAndGet()) {
+                            refreshIssues()
+                        }
+                    }
+                }
+                override fun mouseEntered(e: MouseEvent) {
+                    background = background.brighter()
+                }
+                override fun mouseExited(e: MouseEvent) {
+                    background = JBColor(Color(240, 245, 255), Color(30, 45, 70))
+                }
+            })
+        }
+    }
+
     private inner class IssueRowComponent(val issue: JiraIssue) : JPanel(GridBagLayout()) {
         
         init {
             border = JBUI.Borders.empty(8, 12)
             background = UIUtil.getListBackground()
             maximumSize = Dimension(Int.MAX_VALUE, 45)
+            toolTipText = issue.fields.getSummaryText()
             
             val c = GridBagConstraints().apply {
                 fill = GridBagConstraints.HORIZONTAL

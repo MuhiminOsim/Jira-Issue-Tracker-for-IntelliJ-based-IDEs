@@ -22,7 +22,7 @@ import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
 
-class JiraCreateIssueDialog(private val project: Project) : DialogWrapper(project) {
+class JiraCreateIssueDialog(private val project: Project, private val initialProjectKey: String? = null) : DialogWrapper(project) {
 
     private val projectComboBox = ComboBox<JiraProject>().apply {
         addItem(JiraProject("", "", "Loading..."))
@@ -145,7 +145,19 @@ class JiraCreateIssueDialog(private val project: Project) : DialogWrapper(projec
                         if (projects.isEmpty()) {
                             projectComboBox.addItem(JiraProject("", "", "No projects found"))
                         }
-                        if (projectComboBox.itemCount > 0) projectComboBox.selectedIndex = 0
+                        
+                        if (initialProjectKey != null) {
+                            val index = (0 until projectComboBox.itemCount).find { 
+                                projectComboBox.getItemAt(it).key == initialProjectKey 
+                            }
+                            if (index != null) {
+                                projectComboBox.selectedIndex = index
+                            } else if (projectComboBox.itemCount > 0) {
+                                projectComboBox.selectedIndex = 0
+                            }
+                        } else if (projectComboBox.itemCount > 0) {
+                            projectComboBox.selectedIndex = 0
+                        }
                     }, com.intellij.openapi.application.ModalityState.any())
                 },
                 onFailure = { error ->

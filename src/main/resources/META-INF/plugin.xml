@@ -15,13 +15,20 @@
         <li><strong>Smart Browsing:</strong> Search and filter issues using custom JQL queries.</li>
         <li><strong>Session Persistence:</strong> Automatically restores your last selected project and waits for IDE indexing.</li>
       </ul>
-
-      <h3>Getting Started 🚀</h3>
-      <p>Configure your connection in <strong>Settings → Tools → Jira Issue Tracker</strong> by providing your Jira URL, Email, and API Token.</p>
     ]]></description>
 
     <change-notes><![CDATA[
       <ul>
+        <li><b>1.3.0</b>
+          <ul>
+            <li>New "Quick Create" row at the top of the issue list for seamless task entry.</li>
+            <li>Redesigned responsive filter bar with scrollable quick filters (Assignee, Priority, Type, Parent).</li>
+            <li>Significant performance boost with parallel data fetching and centralized caching.</li>
+            <li>Improved board UX with full-board scrolling and timestamped refresh feedback.</li>
+            <li>Added hover tooltips in the issue list for quick summary viewing.</li>
+            <li>Smart project pre-selection in the creation dialog based on active space.</li>
+          </ul>
+        </li>
         <li><b>1.2.1</b>
           <ul>
             <li>Brand new geometric Jira-inspired plugin icon for both Light and Dark themes.</li>
@@ -56,8 +63,8 @@
                                  id="com.app.jiraplugin.settings.JiraSettingsConfigurable"
                                  displayName="Jira Issue Tracker"/>
 
-        <!-- Tool window on the right side -->
-        <toolWindow id="Jira Issues" secondary="true" anchor="right"
+        <!-- Tool window at the bottom -->
+        <toolWindow id="Jira Issues" anchor="bottom"
                     factoryClass="com.app.jiraplugin.ui.JiraToolWindowFactory"
                     icon="AllIcons.Toolwindows.ToolWindowAnt"/>
 
