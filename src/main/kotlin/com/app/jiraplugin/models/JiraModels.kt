@@ -3,17 +3,16 @@ package com.app.jiraplugin.models
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 
-// New search/jql endpoint request body
+// Search request body for rest/api/3/search/jql
 data class JiraSearchRequest(
     val jql: String,
-    val maxResults: Int = 100,
-    val fields: List<String> = listOf("summary", "description", "status", "assignee", "priority", "issuetype", "updated", "timespent", "aggregatetimespent", "parent", "customfield_10001", "customfield_10020", "timetracking")
+    val maxResults: Int = 50,
+    val nextPageToken: String? = null,
+    val fields: List<String> = listOf("summary", "description", "status", "assignee", "priority", "issuetype", "updated", "parent", "customfield_10020")
 )
 
 data class JiraSearchResponse(
-    val startAt: Int?,
-    val maxResults: Int?,
-    val total: Int?,
+    val nextPageToken: String?,
     val issues: List<JiraIssue>
 )
 
@@ -188,7 +187,24 @@ data class JiraAdfDocument(
     val type: String,
     val version: Int,
     val content: List<JiraAdfBlock>
-)
+) {
+    companion object {
+        fun fromPlainText(text: String): JiraAdfDocument {
+            return JiraAdfDocument(
+                type = "doc",
+                version = 1,
+                content = listOf(
+                    JiraAdfBlock(
+                        type = "paragraph",
+                        content = listOf(
+                            JiraAdfInline(type = "text", text = text)
+                        )
+                    )
+                )
+            )
+        }
+    }
+}
 
 data class JiraAdfBlock(
     val type: String,

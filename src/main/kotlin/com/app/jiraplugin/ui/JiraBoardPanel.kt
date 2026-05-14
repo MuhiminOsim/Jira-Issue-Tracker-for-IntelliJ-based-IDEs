@@ -376,7 +376,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun loadIssues(projectKey: String) {
-        var jql = "project = \"$projectKey\" AND sprint IN openSprints()"
+        var jql = "project = '$projectKey'"
         
         // Add active filters to JQL
         activeFilters.forEach { (category, values) ->
@@ -400,10 +400,13 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
         jql += " ORDER BY rank ASC"
         
         ApplicationManager.getApplication().executeOnPooledThread {
-            JiraApiClient.instance.searchIssues(jql).fold(
+            JiraApiClient.instance.searchIssues(jql, maxResults = 500).fold(
                 onSuccess = { response ->
                     ApplicationManager.getApplication().invokeLater {
-                        allIssues = response.issues
+                        // Board should only show issues in active sprints
+                        allIssues = response.issues.filter { issue ->
+                            issue.fields.sprints?.any { it.state.equals("active", ignoreCase = true) } == true
+                        }
                         refreshButton.isEnabled = true
                         statusLabel.text = "Last updated: ${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))} (${allIssues.size} issues)"
                         if (allIssues.isEmpty() && activeFilters.isEmpty()) {
@@ -712,7 +715,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
                     if (transition != null) {
                         JiraApiClient.instance.performTransition(issue.key, transition.id).onSuccess {
                             ApplicationManager.getApplication().invokeLater {
-                                refreshBoard(issue.key.substringBefore("-"))
+                                refreshBoard(issue.key.substringBefore("-"), force = true)
                             }
                         }
                     } else {

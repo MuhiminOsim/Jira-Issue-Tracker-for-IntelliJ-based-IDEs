@@ -59,9 +59,29 @@ class JiraApiClient {
     fun searchIssues(jql: String, maxResults: Int = 50): Result<JiraSearchResponse> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
-            val response = api.searchIssues(JiraSearchRequest(jql, maxResults)).execute()
-            if (response.isSuccessful) Result.success(response.body() ?: JiraSearchResponse(0, 0, 0, emptyList()))
-            else Result.failure(Exception("Failed to fetch issues: ${response.code()}"))
+            
+            val allIssues = mutableListOf<JiraIssue>()
+            var nextPageToken: String? = null
+            
+            do {
+                // For the new search/jql API, maxResults is typically capped at 100 or 50
+                val pageSize = 50
+                
+                val response = api.searchIssues(JiraSearchRequest(jql, maxResults = pageSize, nextPageToken = nextPageToken)).execute()
+                
+                if (response.isSuccessful) {
+                    val body = response.body() ?: break
+                    allIssues.addAll(body.issues)
+                    nextPageToken = body.nextPageToken
+                    
+                    if (nextPageToken == null || body.issues.isEmpty()) break
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    return Result.failure(Exception("Failed to fetch issues: ${response.code()} - $errorBody"))
+                }
+            } while (allIssues.size < maxResults && nextPageToken != null)
+            
+            Result.success(JiraSearchResponse(null, allIssues))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -338,10 +358,13 @@ class JiraApiClient {
             // But some APIs accept plain text. Let's try sending it as ADF if possible or just plain text update.
             // For simplicity, many implementations use a map.
             
-            val fields = mapOf(
+            val fields = mutableMapOf<String, Any>(
                 "summary" to summary
-                // Description update is complex with ADF, skipping for now or would need JiraAdfDocument.fromPlainText
             )
+            
+            if (description.isNotEmpty()) {
+                fields["description"] = JiraAdfDocument.fromPlainText(description)
+            }
             
             val response = api.updateIssue(issueKey, JiraUpdateIssueRequest(fields)).execute()
             if (response.isSuccessful) Result.success(Unit)

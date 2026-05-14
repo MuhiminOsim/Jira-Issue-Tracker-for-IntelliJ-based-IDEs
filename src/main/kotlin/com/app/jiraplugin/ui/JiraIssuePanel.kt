@@ -684,7 +684,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
         val projectKey = selectedProjectStr.substringBefore(" - ")
-        var jql = "project = \"$projectKey\""
+        var jql = "project = '$projectKey'"
         
         // Add active filters to JQL
         activeFilters.forEach { (category, values) ->
@@ -713,12 +713,23 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Jira issues", true) {
             override fun run(indicator: ProgressIndicator) {
-                val result = JiraApiClient.instance.searchIssues(jql)
+                val result = JiraApiClient.instance.searchIssues(jql, maxResults = 500)
                 ApplicationManager.getApplication().invokeLater {
                     refreshButton.isEnabled = true
                     result.fold(
                         onSuccess = { response ->
-                            allIssues = response.issues
+                            // Show only backlog (not done) and active/future sprints. Exclude closed sprint issues.
+                            allIssues = response.issues.filter { issue ->
+                                val sprints = issue.fields.sprints
+                                val isActive = sprints?.any { it.state.equals("active", ignoreCase = true) } == true
+                                val isFuture = sprints?.any { it.state.equals("future", ignoreCase = true) } == true
+                                val isDone = issue.fields.getStatusCategoryKey()?.equals("done", ignoreCase = true) == true
+                                
+                                // Logic:
+                                // 1. Always show issues in active or future sprints
+                                // 2. For issues not in a current/future sprint (Backlog), show only if they are not 'Done'
+                                isActive || isFuture || (!isDone && (sprints == null || sprints.isEmpty() || sprints.all { it.state.equals("closed", ignoreCase = true) }))
+                            }
                             applyLocalFilter()
                             statusLabel.text = "Found ${allIssues.size} issues (Last updated: ${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))})"
                         },
