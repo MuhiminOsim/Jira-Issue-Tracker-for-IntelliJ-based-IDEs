@@ -104,6 +104,10 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private var selectedIssue: JiraIssue? = null
     private var selectedRow: IssueRowComponent? = null
+    
+    private var currentRefreshTask: Task.Backgroundable? = null
+    private var activeIssueKeys = emptySet<String>()
+    private val sprintNameLookup = mutableMapOf<Int, String>()
 
     init {
         setupUI()
@@ -395,8 +399,7 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             if (selected == "$prefix: All") {
                 activeFilters.remove(category)
             } else {
-                val value = if (category == FilterCategory.PARENT) selected.substringBefore(":") else selected
-                activeFilters[category] = listOf(value)
+                activeFilters[category] = listOf(selected)
             }
         }
 
@@ -415,6 +418,14 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             } else {
                 for (i in 0 until combo.itemCount) {
                     val item = combo.getItemAt(i)
+                    // For Parent, check if the item starts with the key
+                    if (category == FilterCategory.PARENT) {
+                        val key = selected.substringBefore(":")
+                        if (item.startsWith("$key:")) {
+                            combo.selectedIndex = i
+                            return
+                        }
+                    }
                     if (item == selected) {
                         combo.selectedIndex = i
                         return
@@ -475,15 +486,83 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
             issueListContainer.add(CreateIssueRowComponent())
         }
         
+        // Group issues by sprint
+        val activeSprintGroups = mutableMapOf<Int, Pair<String, MutableList<JiraIssue>>>()
+        val backlogIssues = mutableListOf<JiraIssue>()
+        
         filtered.forEach { issue ->
-            val row = IssueRowComponent(issue)
-            issueListContainer.add(row)
+            // Use the JQL-sourced active keys as the source of truth
+            val isActiveInJql = activeIssueKeys.contains(issue.key)
+            
+            if (isActiveInJql) {
+                // Try to find the actual sprint object for the name/ID
+                val sprint = issue.fields.sprints.find { it.state.equals("active", ignoreCase = true) } 
+                    ?: issue.fields.sprints.firstOrNull()
+                
+                val sprintId = sprint?.id ?: -1
+                val sprintName = sprint?.name 
+                    ?: (if (sprintId != -1) sprintNameLookup[sprintId] else null)
+                    ?: "Active Sprint"
+                
+                val group = activeSprintGroups.getOrPut(sprintId) { sprintName to mutableListOf() }
+                group.second.add(issue)
+            } else {
+                backlogIssues.add(issue)
+            }
         }
+        
+        // 1. Add Active Sprints
+        activeSprintGroups.values.forEach { (name, issues) ->
+            issueListContainer.add(GroupHeaderComponent(name, issues.size))
+            issues.forEach { issue ->
+                issueListContainer.add(IssueRowComponent(issue))
+            }
+        }
+        
+        // 2. Add Backlog
+        if (backlogIssues.isNotEmpty()) {
+            issueListContainer.add(GroupHeaderComponent("Backlog", backlogIssues.size))
+            backlogIssues.forEach { issue ->
+                issueListContainer.add(IssueRowComponent(issue))
+            }
+        }
+        
         issueListContainer.add(Box.createVerticalGlue())
         issueListContainer.revalidate()
         issueListContainer.repaint()
         
         statusLabel.text = "Showing ${filtered.size} of ${allIssues.size} issues"
+    }
+
+    private inner class GroupHeaderComponent(title: String, count: Int) : JPanel(BorderLayout()) {
+        init {
+            background = UIUtil.getPanelBackground()
+            border = JBUI.Borders.empty(12, 16, 6, 16)
+            maximumSize = Dimension(Int.MAX_VALUE, 40)
+            
+            val label = JLabel(title.uppercase()).apply {
+                font = JBUI.Fonts.label(11f).asBold()
+                foreground = JBColor.GRAY
+            }
+            val countLabel = JLabel("• $count").apply {
+                font = JBUI.Fonts.smallFont()
+                foreground = JBColor.GRAY
+                border = JBUI.Borders.emptyLeft(6)
+            }
+            
+            val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+                isOpaque = false
+                add(label)
+                add(countLabel)
+            }
+            add(leftPanel, BorderLayout.WEST)
+            
+            // Add a subtle line
+            add(JPanel().apply {
+                background = JBColor.border()
+                preferredSize = Dimension(0, 1)
+            }, BorderLayout.SOUTH)
+        }
     }
 
     private fun updateFilterUI() {
@@ -684,9 +763,9 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         }
 
         val projectKey = selectedProjectStr.substringBefore(" - ")
-        var jql = "project = '$projectKey'"
         
-        // Add active filters to JQL
+        // Base JQL for filters
+        var filterJql = ""
         activeFilters.forEach { (category, values) ->
             if (values.isNotEmpty()) {
                 val fieldName = when (category) {
@@ -695,51 +774,77 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
                     FilterCategory.ASSIGNEE -> "assignee"
                     FilterCategory.PRIORITY -> "priority"
                     FilterCategory.LABELS -> "labels"
-                    FilterCategory.SPRINT -> "sprint"
                     FilterCategory.PARENT -> "parent"
+                    FilterCategory.SPRINT -> "sprint"
                     FilterCategory.FIX_VERSIONS -> "fixVersion"
                 }
                 
-                val valuesStr = values.joinToString(", ") { "\"$it\"" }
-                jql += " AND $fieldName IN ($valuesStr)"
+                // Clean values for JQL (especially for Parent which might have ": Summary")
+                val cleanValues = if (category == FilterCategory.PARENT) {
+                    values.map { it.substringBefore(":") }
+                } else values
+                
+                val valuesStr = cleanValues.joinToString(", ") { "\"$it\"" }
+                
+                if (category == FilterCategory.PARENT) {
+                    filterJql += " AND (parent IN ($valuesStr) OR \"Epic Link\" IN ($valuesStr))"
+                } else {
+                    filterJql += " AND $fieldName IN ($valuesStr)"
+                }
             }
         }
-
-        // Sorting
-        jql += " ORDER BY updated DESC"
 
         statusLabel.text = "Searching..."
         refreshButton.isEnabled = false
 
-        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading Jira issues", true) {
+        val newTask = object : Task.Backgroundable(project, "Loading Jira issues", true) {
             override fun run(indicator: ProgressIndicator) {
-                val result = JiraApiClient.instance.searchIssues(jql, maxResults = 500)
-                ApplicationManager.getApplication().invokeLater {
-                    refreshButton.isEnabled = true
-                    result.fold(
-                        onSuccess = { response ->
-                            // Show only backlog (not done) and active/future sprints. Exclude closed sprint issues.
-                            allIssues = response.issues.filter { issue ->
-                                val sprints = issue.fields.sprints
-                                val isActive = sprints?.any { it.state.equals("active", ignoreCase = true) } == true
-                                val isFuture = sprints?.any { it.state.equals("future", ignoreCase = true) } == true
-                                val isDone = issue.fields.getStatusCategoryKey()?.equals("done", ignoreCase = true) == true
-                                
-                                // Logic:
-                                // 1. Always show issues in active or future sprints
-                                // 2. For issues not in a current/future sprint (Backlog), show only if they are not 'Done'
-                                isActive || isFuture || (!isDone && (sprints == null || sprints.isEmpty() || sprints.all { it.state.equals("closed", ignoreCase = true) }))
+                // 1. Fetch Active Sprints (Definitive source for the 30 active issues)
+                val activeJql = "project = \"$projectKey\" AND issuetype != Epic AND sprint in openSprints() $filterJql"
+                val activeResult = JiraApiClient.instance.searchIssues(activeJql, maxResults = 500)
+                
+                // 2. Fetch all uncompleted work (Source for the 154 backlog issues + active ones)
+                val uncompletedJql = "project = \"$projectKey\" AND issuetype != Epic AND statusCategory != Done $filterJql"
+                val uncompletedResult = JiraApiClient.instance.searchIssues(uncompletedJql, maxResults = 1000)
+
+                // 3. Metadata fetch in background
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    JiraApiClient.instance.getBoards(projectKey).onSuccess { boards ->
+                        boards.firstOrNull()?.let { board ->
+                            JiraApiClient.instance.getSprints(board.id).onSuccess { sprints ->
+                                sprints.forEach { sprintNameLookup[it.id] = it.name }
                             }
-                            applyLocalFilter()
-                            statusLabel.text = "Found ${allIssues.size} issues (Last updated: ${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))})"
-                        },
-                        onFailure = { error ->
-                            statusLabel.text = "Error: ${error.message}"
                         }
-                    )
+                    }
+                }
+
+                ApplicationManager.getApplication().invokeLater {
+                    if (currentRefreshTask == this) {
+                        refreshButton.isEnabled = true
+                        
+                        val activeIssues = activeResult.getOrNull()?.issues ?: emptyList()
+                        val uncompletedIssues = uncompletedResult.getOrNull()?.issues ?: emptyList()
+                        
+                        // Set the definitive list of active keys
+                        activeIssueKeys = activeIssues.map { it.key }.toSet()
+                        
+                        // Combine into one list for the panel, ensuring active ones are included
+                        // (uncompletedResult usually already includes active issues)
+                        allIssues = (activeIssues + uncompletedIssues).distinctBy { it.key }
+                        
+                        try {
+                            applyLocalFilter()
+                            val backlogCount = allIssues.size - activeIssueKeys.size
+                            statusLabel.text = "Found ${allIssues.size} issues (Active: ${activeIssueKeys.size}, Backlog: $backlogCount)"
+                        } catch (e: Exception) {
+                            statusLabel.text = "Error displaying issues: ${e.message}"
+                        }
+                    }
                 }
             }
-        })
+        }
+        currentRefreshTask = newTask
+        ProgressManager.getInstance().run(newTask)
     }
 
     private fun saveIssueDetails() {

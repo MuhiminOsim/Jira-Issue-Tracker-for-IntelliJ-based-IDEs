@@ -8,12 +8,15 @@ data class JiraSearchRequest(
     val jql: String,
     val maxResults: Int = 50,
     val nextPageToken: String? = null,
-    val fields: List<String> = listOf("summary", "description", "status", "assignee", "priority", "issuetype", "updated", "parent", "customfield_10020")
+    val fields: List<String> = listOf("summary", "description", "status", "assignee", "priority", "issuetype", "updated", "parent", "customfield_10020", "customfield_10001", "customfield_10007", "customfield_11000", "sprint")
 )
 
 data class JiraSearchResponse(
-    val nextPageToken: String?,
-    val issues: List<JiraIssue>
+    @SerializedName("issues") val issues: List<JiraIssue> = emptyList(),
+    @SerializedName("nextPageToken") val nextPageToken: String? = null,
+    @SerializedName("total") val total: Int? = null,
+    @SerializedName("startAt") val startAt: Int? = null,
+    @SerializedName("maxResults") val maxResults: Int? = null
 )
 
 data class JiraIssue(
@@ -36,9 +39,67 @@ data class JiraIssueFields(
     val aggregatetimespent: Long?,
     val parent: JsonElement?,
     @SerializedName("customfield_10001") val epicLink: String?,
-    @SerializedName("customfield_10020") val sprints: List<JiraSprint>?,
+    @SerializedName("customfield_10020", alternate = ["sprint", "customfield_10007", "customfield_11000"]) val sprintField: JsonElement?,
     val timetracking: JiraTimeTracking?
 ) {
+    companion object {
+        private val gson = com.google.gson.Gson()
+    }
+
+    val sprints: List<JiraSprint>
+        get() = parseSprints(sprintField)
+
+    private fun parseSprints(element: JsonElement?): List<JiraSprint> {
+        if (element == null || element.isJsonNull) return emptyList()
+        
+        val list = mutableListOf<JiraSprint>()
+        
+        fun parseString(s: String): JiraSprint? {
+            // Format: com.atlassian.greenhopper.service.sprint.Sprint@...[id=1,rapidViewId=1,state=ACTIVE,name=Sprint 1,...]
+            try {
+                val content = s.substringAfter("[", "").substringBeforeLast("]", "")
+                if (content.isEmpty()) return null
+                
+                // Use a smarter split that doesn't break on commas in names
+                val pairs = content.split(Regex(",(?=[a-zA-Z]+=)")).associate { 
+                    val parts = it.split("=", limit = 2)
+                    if (parts.size == 2) parts[0].trim() to parts[1].trim()
+                    else "" to ""
+                }
+                
+                val id = pairs["id"]?.toIntOrNull() ?: return null
+                val name = pairs["name"] ?: "Unnamed Sprint"
+                val state = pairs["state"] ?: "UNKNOWN"
+                
+                return JiraSprint(id, name, state, pairs["originBoardId"]?.toIntOrNull())
+            } catch (e: Exception) {
+                return null
+            }
+        }
+
+        if (element.isJsonArray) {
+            element.asJsonArray.forEach { 
+                if (it.isJsonObject) {
+                    try {
+                        val sprint = gson.fromJson(it, JiraSprint::class.java)
+                        if (sprint != null) list.add(sprint)
+                    } catch (e: Exception) {}
+                } else if (it.isJsonPrimitive && it.asJsonPrimitive.isString) {
+                    parseString(it.asString)?.let { s -> list.add(s) }
+                }
+            }
+        } else if (element.isJsonObject) {
+            try {
+                val sprint = gson.fromJson(element, JiraSprint::class.java)
+                if (sprint != null) list.add(sprint)
+            } catch (e: Exception) {}
+        } else if (element.isJsonPrimitive && element.asJsonPrimitive.isString) {
+            parseString(element.asString)?.let { s -> list.add(s) }
+        }
+        
+        return list
+    }
+
     fun getSummaryText(): String = summary ?: "No Summary"
 
     fun getDescriptionText(): String {
@@ -115,7 +176,7 @@ data class JiraIssueFields(
     }
 
     fun getSprintNames(): String {
-        return sprints?.joinToString(", ") { it.name } ?: "None"
+        return if (sprints.isEmpty()) "None" else sprints.joinToString(", ") { it.name }
     }
 
     private fun getStringFromObject(element: JsonElement?, key: String, default: String?): String? {

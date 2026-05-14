@@ -1,6 +1,6 @@
 # <img src="src/main/resources/META-INF/pluginIcon.svg" width="40" height="40" align="center"> Jira Issue Tracker for JetBrains IDEs
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/MuhiminOsim/Jira-Issue-Tracker-for-IntelliJ-based-IDEs)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/MuhiminOsim/Jira-Issue-Tracker-for-IntelliJ-based-IDEs)
 [![Platform](https://img.shields.io/badge/platform-JetBrains-orange.svg)](https://plugins.jetbrains.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 

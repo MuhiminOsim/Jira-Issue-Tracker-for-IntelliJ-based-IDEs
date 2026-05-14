@@ -56,32 +56,51 @@ class JiraApiClient {
             .create(JiraApi::class.java)
     }
 
-    fun searchIssues(jql: String, maxResults: Int = 50): Result<JiraSearchResponse> {
+    fun searchIssues(jql: String, maxResults: Int = 1000): Result<JiraSearchResponse> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
             
             val allIssues = mutableListOf<JiraIssue>()
-            var nextPageToken: String? = null
+            val seenKeys = mutableSetOf<String>()
+            var currentToken: String? = null
+            var iterations = 0
             
             do {
-                // For the new search/jql API, maxResults is typically capped at 100 or 50
-                val pageSize = 50
+                val request = if (currentToken == null) {
+                    JiraSearchRequest(jql = jql, maxResults = 100)
+                } else {
+                    JiraSearchRequest(jql = jql, maxResults = 100, nextPageToken = currentToken)
+                }
                 
-                val response = api.searchIssues(JiraSearchRequest(jql, maxResults = pageSize, nextPageToken = nextPageToken)).execute()
+                val response = api.searchIssues(request).execute()
                 
                 if (response.isSuccessful) {
                     val body = response.body() ?: break
-                    allIssues.addAll(body.issues)
-                    nextPageToken = body.nextPageToken
+                    val newIssues = body.issues
+                    if (newIssues.isEmpty()) break
                     
-                    if (nextPageToken == null || body.issues.isEmpty()) break
+                    var addedAny = false
+                    newIssues.forEach { 
+                        if (seenKeys.add(it.key)) {
+                            allIssues.add(it)
+                            addedAny = true
+                        }
+                    }
+                    
+                    if (!addedAny) break // Avoid infinite loops if we keep getting same issues
+                    
+                    val nextToken = body.nextPageToken
+                    if (nextToken == null || nextToken == currentToken) break
+                    
+                    currentToken = nextToken
+                    iterations++
                 } else {
                     val errorBody = response.errorBody()?.string()
                     return Result.failure(Exception("Failed to fetch issues: ${response.code()} - $errorBody"))
                 }
-            } while (allIssues.size < maxResults && nextPageToken != null)
+            } while (allIssues.size < maxResults && iterations < 10)
             
-            Result.success(JiraSearchResponse(null, allIssues))
+            Result.success(JiraSearchResponse(issues = allIssues))
         } catch (e: Exception) {
             Result.failure(e)
         }
