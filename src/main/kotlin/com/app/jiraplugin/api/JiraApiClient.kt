@@ -56,12 +56,51 @@ class JiraApiClient {
             .create(JiraApi::class.java)
     }
 
-    fun searchIssues(jql: String, maxResults: Int = 50): Result<JiraSearchResponse> {
+    fun searchIssues(jql: String, maxResults: Int = 1000): Result<JiraSearchResponse> {
         return try {
             val api = createApi() ?: return Result.failure(IllegalStateException("Jira not configured"))
-            val response = api.searchIssues(JiraSearchRequest(jql, maxResults)).execute()
-            if (response.isSuccessful) Result.success(response.body() ?: JiraSearchResponse(0, 0, 0, emptyList()))
-            else Result.failure(Exception("Failed to fetch issues: ${response.code()}"))
+            
+            val allIssues = mutableListOf<JiraIssue>()
+            val seenKeys = mutableSetOf<String>()
+            var currentToken: String? = null
+            var iterations = 0
+            
+            do {
+                val request = if (currentToken == null) {
+                    JiraSearchRequest(jql = jql, maxResults = 100)
+                } else {
+                    JiraSearchRequest(jql = jql, maxResults = 100, nextPageToken = currentToken)
+                }
+                
+                val response = api.searchIssues(request).execute()
+                
+                if (response.isSuccessful) {
+                    val body = response.body() ?: break
+                    val newIssues = body.issues
+                    if (newIssues.isEmpty()) break
+                    
+                    var addedAny = false
+                    newIssues.forEach { 
+                        if (seenKeys.add(it.key)) {
+                            allIssues.add(it)
+                            addedAny = true
+                        }
+                    }
+                    
+                    if (!addedAny) break // Avoid infinite loops if we keep getting same issues
+                    
+                    val nextToken = body.nextPageToken
+                    if (nextToken == null || nextToken == currentToken) break
+                    
+                    currentToken = nextToken
+                    iterations++
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    return Result.failure(Exception("Failed to fetch issues: ${response.code()} - $errorBody"))
+                }
+            } while (allIssues.size < maxResults && iterations < 10)
+            
+            Result.success(JiraSearchResponse(issues = allIssues))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -338,10 +377,13 @@ class JiraApiClient {
             // But some APIs accept plain text. Let's try sending it as ADF if possible or just plain text update.
             // For simplicity, many implementations use a map.
             
-            val fields = mapOf(
+            val fields = mutableMapOf<String, Any>(
                 "summary" to summary
-                // Description update is complex with ADF, skipping for now or would need JiraAdfDocument.fromPlainText
             )
+            
+            if (description.isNotEmpty()) {
+                fields["description"] = JiraAdfDocument.fromPlainText(description)
+            }
             
             val response = api.updateIssue(issueKey, JiraUpdateIssueRequest(fields)).execute()
             if (response.isSuccessful) Result.success(Unit)

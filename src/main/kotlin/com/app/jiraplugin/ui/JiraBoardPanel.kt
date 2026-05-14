@@ -71,6 +71,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private val iconCache = ConcurrentHashMap<String, Icon>()
     private var currentProjectKey: String = ""
+    private var currentBoard: JiraBoard? = null
     private var issuesByStatus = mutableMapOf<String, MutableList<JiraIssue>>()
     private val allLists = mutableListOf<JList<JiraIssue>>()
 
@@ -167,7 +168,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
             if (dialog.showAndGet()) {
                 activeFilters = dialog.getSelectedFilters().toMutableMap()
                 syncCombosFromActiveFilters()
-                loadIssues(currentProjectKey)
+                loadIssues()
             }
         }
 
@@ -212,6 +213,14 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
             } else {
                 for (i in 0 until combo.itemCount) {
                     val item = combo.getItemAt(i)
+                    // For Parent, check if the item starts with the key
+                    if (category == FilterCategory.PARENT) {
+                        val key = selected.substringBefore(":")
+                        if (item.startsWith("$key:")) {
+                            combo.selectedIndex = i
+                            return
+                        }
+                    }
                     if (item == selected) {
                         combo.selectedIndex = i
                         return
@@ -229,7 +238,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
 
     private fun onFilterChanged() {
         updateFilterUI()
-        loadIssues(currentProjectKey)
+        loadIssues()
     }
 
     private fun updateFilterUI() {
@@ -274,13 +283,15 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
 
         // Start everything in parallel
         fetchFilterData(projectKey)
-        loadIssues(projectKey)
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Loading board", true) {
             override fun run(indicator: ProgressIndicator) {
                 JiraApiClient.instance.getBoards(projectKey).onSuccess { boards ->
-                    val board = boards.firstOrNull()
+                    // Prefer scrum boards if we're looking for sprints
+                    val board = boards.find { it.type == "scrum" } ?: boards.firstOrNull()
                     if (board != null) {
+                        currentBoard = board
+                        loadIssues()
                         JiraApiClient.instance.getBoardConfiguration(board.id).onSuccess {
                             ApplicationManager.getApplication().invokeLater {
                                 refreshButton.isEnabled = true
@@ -375,12 +386,17 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
         }
     }
 
-    private fun loadIssues(projectKey: String) {
-        var jql = "project = \"$projectKey\" AND sprint IN openSprints()"
+    private fun loadIssues() {
+        val projectKey = currentProjectKey
+        if (projectKey.isBlank()) return
+        
+        var jql = "project = '$projectKey'"
         
         // Add active filters to JQL
+        var hasSprintFilter = false
         activeFilters.forEach { (category, values) ->
             if (values.isNotEmpty()) {
+                if (category == FilterCategory.SPRINT) hasSprintFilter = true
                 val fieldName = when (category) {
                     FilterCategory.STATUS -> "status"
                     FilterCategory.WORK_TYPE -> "issuetype"
@@ -392,15 +408,31 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
                     FilterCategory.FIX_VERSIONS -> "fixVersion"
                 }
                 
-                val valuesStr = values.joinToString(", ") { "\"$it\"" }
-                jql += " AND $fieldName IN ($valuesStr)"
+                // Clean values for JQL (especially for Parent which might have ": Summary")
+                val cleanValues = if (category == FilterCategory.PARENT) {
+                    values.map { it.substringBefore(":") }
+                } else values
+                
+                val valuesStr = cleanValues.joinToString(", ") { "\"$it\"" }
+                
+                if (category == FilterCategory.PARENT) {
+                    // Support both modern 'parent' and legacy 'Epic Link'
+                    jql += " AND (parent IN ($valuesStr) OR \"Epic Link\" IN ($valuesStr))"
+                } else {
+                    jql += " AND $fieldName IN ($valuesStr)"
+                }
             }
+        }
+        
+        if (!hasSprintFilter) {
+            // Only show active sprints in board panel
+            jql += " AND sprint in openSprints()"
         }
         
         jql += " ORDER BY rank ASC"
         
         ApplicationManager.getApplication().executeOnPooledThread {
-            JiraApiClient.instance.searchIssues(jql).fold(
+            JiraApiClient.instance.searchIssues(jql, maxResults = 500).fold(
                 onSuccess = { response ->
                     ApplicationManager.getApplication().invokeLater {
                         allIssues = response.issues
@@ -425,10 +457,8 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
     }
 
     private fun applyLocalFilter() {
-        val projectKey = currentProjectKey
-        val boards = JiraApiClient.instance.getBoards(projectKey).getOrNull()
-        val boardId = boards?.firstOrNull()?.id ?: return
-        val config = JiraApiClient.instance.getBoardConfiguration(boardId).getOrNull() ?: return
+        val board = currentBoard ?: return
+        val config = JiraApiClient.instance.getBoardConfiguration(board.id).getOrNull() ?: return
 
         val searchText = searchField.text.lowercase()
         
@@ -712,7 +742,7 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
                     if (transition != null) {
                         JiraApiClient.instance.performTransition(issue.key, transition.id).onSuccess {
                             ApplicationManager.getApplication().invokeLater {
-                                refreshBoard(issue.key.substringBefore("-"))
+                                refreshBoard(issue.key.substringBefore("-"), force = true)
                             }
                         }
                     } else {

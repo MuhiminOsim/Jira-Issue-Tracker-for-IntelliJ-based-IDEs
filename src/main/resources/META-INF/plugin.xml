@@ -19,6 +19,16 @@
 
     <change-notes><![CDATA[
       <ul>
+        <li><b>1.3.1</b>
+          <ul>
+            <li>Divided the "Issues" tab into logical sections: Active Sprints and Backlog for better organization.</li>
+            <li>Enhanced Jira Cloud compatibility by migrating to the latest search/jql API.</li>
+            <li>Significantly improved issue loading speed with optimized parallelized data fetching.</li>
+            <li>More robust sprint metadata parsing to ensure accurate naming of sprint headers.</li>
+            <li>Fixed and improved filtering for Parent (Epics) and Sprints across all views.</li>
+            <li>Corrected JQL logic to accurately reflect the real-time state of your Jira space.</li>
+          </ul>
+        </li>
         <li><b>1.3.0</b>
           <ul>
             <li>New "Quick Create" row at the top of the issue list for seamless task entry.</li>
