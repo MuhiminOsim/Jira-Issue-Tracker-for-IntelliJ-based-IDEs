@@ -21,7 +21,6 @@ import com.intellij.util.ui.UIUtil
 import java.awt.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import javax.imageio.ImageIO
 import javax.swing.*
@@ -1042,11 +1041,13 @@ class JiraIssuePanel(private val project: Project) : JPanel(BorderLayout()) {
         if (loadingIcons.add(url)) {
             ApplicationManager.getApplication().executeOnPooledThread {
                 try {
-                    val image = ImageIO.read(URL(url))
-                    val icon = ImageIcon(image.getScaledInstance(16, 16, Image.SCALE_SMOOTH))
-                    iconCache[url] = icon
-                    ApplicationManager.getApplication().invokeLater { 
-                        issueListContainer.repaint()
+                    val image = ImageIO.read(java.net.URI.create(url).toURL())
+                    if (image != null) {
+                        val icon = ImageIcon(image.getScaledInstance(16, 16, Image.SCALE_SMOOTH))
+                        iconCache[url] = icon
+                        ApplicationManager.getApplication().invokeLater { 
+                            issueListContainer.repaint()
+                        }
                     }
                 } catch (e: Exception) {
                 } finally {

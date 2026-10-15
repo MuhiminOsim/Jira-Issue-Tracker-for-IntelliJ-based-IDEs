@@ -19,6 +19,14 @@
 
     <change-notes><![CDATA[
       <ul>
+        <li><b>1.5.0</b>
+          <ul>
+            <li>Updated support for the latest IntelliJ Platform releases (including 2026.2 / build 262+ and beyond).</li>
+            <li>Upgraded Kotlin and IntelliJ Platform Gradle Plugin dependencies to their latest versions.</li>
+            <li>Resolved all deprecated API usages across credential storage and icon loading.</li>
+            <li>Enhanced null-safety and stability when loading remote Jira icons.</li>
+          </ul>
+        </li>
         <li><b>1.3.1</b>
           <ul>
             <li>Divided the "Issues" tab into logical sections: Active Sprints and Backlog for better organization.</li>

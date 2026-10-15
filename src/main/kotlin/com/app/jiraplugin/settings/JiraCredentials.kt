@@ -2,12 +2,12 @@ package com.app.jiraplugin.settings
 
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.credentialStore.Credentials
+import com.intellij.credentialStore.generateServiceName
 import com.intellij.ide.passwordSafe.PasswordSafe
 
 object JiraCredentials {
     private val CREDENTIAL_ATTRIBUTES = CredentialAttributes(
-        "JiraPlugin — ApiToken",
-        "JiraPlugin_ApiToken"
+        generateServiceName("JiraPlugin", "ApiToken")
     )
 
     fun getApiToken(): String? {

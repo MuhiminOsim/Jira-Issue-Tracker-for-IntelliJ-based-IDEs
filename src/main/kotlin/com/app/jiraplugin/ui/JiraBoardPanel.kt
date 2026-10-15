@@ -21,7 +21,6 @@ import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 import javax.imageio.ImageIO
 import javax.swing.*
@@ -506,11 +505,13 @@ class JiraBoardPanel(private val project: Project) : JPanel(BorderLayout()) {
         
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val image = ImageIO.read(URL(url))
-                val icon = ImageIcon(image.getScaledInstance(14, 14, Image.SCALE_SMOOTH))
-                iconCache[url] = icon
-                ApplicationManager.getApplication().invokeLater { 
-                    columnsContainer.repaint()
+                val image = ImageIO.read(java.net.URI.create(url).toURL())
+                if (image != null) {
+                    val icon = ImageIcon(image.getScaledInstance(14, 14, Image.SCALE_SMOOTH))
+                    iconCache[url] = icon
+                    ApplicationManager.getApplication().invokeLater { 
+                        columnsContainer.repaint()
+                    }
                 }
             } catch (e: Exception) {}
         }
