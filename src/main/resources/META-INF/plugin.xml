@@ -19,6 +19,13 @@
 
     <change-notes><![CDATA[
       <ul>
+        <li><b>1.5.1</b>
+          <ul>
+            <li>Expanded IDE build compatibility (supporting Android Studio 2026.2 / build 262+ and IntelliJ IDEA 2026.3 / build 263+).</li>
+            <li>Resolved credential storage deprecations and URL handling warnings.</li>
+            <li>Enhanced plugin archive structure and overall platform stability.</li>
+          </ul>
+        </li>
         <li><b>1.5.0</b>
           <ul>
             <li>Updated support for the latest IntelliJ Platform releases (including 2026.2 / build 262+ and beyond).</li>
